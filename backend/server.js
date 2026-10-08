@@ -32,7 +32,7 @@ app.get('/api/forms/schema',(req,res)=>{
     fields:[
       {name:"name",label:"Full Name",type:"text",required:true,enabled:true},
       {name:"email",label:"Email Address",type:"email",required:true,enabled:true},
-      {name:"phone",label:"Phone Number",type:"tel",required:true,enabled:true,pattern:"[\\+0-9 ()-]{7,20}",title:"Use 7–20 characters: digits, spaces, brackets, plus or hyphen."},
+      {name:"phone",label:"Phone Number",type:"tel",required:true,enabled:true,pattern: "[+0-9 ()\\-]{7,20}",title:"Use 7–20 characters: digits, spaces, brackets, plus or hyphen."},
       {name:"enquiry_type",label:"Enquiry Type",type:"select",required:true,enabled:true,options:["Training","Internship","IT Services","Placement support","Hackathon","General"]},
       {name:"interest",label:"Program or Service",type:"select",required:true,enabled:true,options:[]},
       {name:"background",label:"Your Background",type:"select",required:true,enabled:true,options:["","Student","Fresher","Working Professional","Business Owner","Other"]},
