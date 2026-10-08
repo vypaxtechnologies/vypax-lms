@@ -1,0 +1,23 @@
+{
+  "name": "vypax-technologies-mern",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "node backend/server.js",
+    "client": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "node backend/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "multer": "^2.4.0",
+    "nodemon": "^3.1.14",
+    "resend": "^6.32.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

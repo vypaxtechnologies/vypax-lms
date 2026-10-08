@@ -1,0 +1,135 @@
+(async()=>{
+
+ const root=document.querySelector('#portal-root'),params=new URLSearchParams(location.search);
+
+ const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e};
+
+ const a=(text,href,cls='button outline')=>{const e=el('a',text,cls);e.href=href;return e};
+
+ async function api(path,body){const r=await fetch('/api/'+path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const data=await r.json();if(r.status===401){location.href='account.html?next='+encodeURIComponent('portal.html'+location.search);throw Error('Please sign in.')}if(!r.ok)throw Error(data.error||'Please try again.');return data}
+
+ function form(fields,buttonText,submit){const f=el('form',undefined,'portal-form');for(const field of fields){const label=el('label',field.label);let input;if(field.options){input=el('select');for(const [value,text] of field.options){const option=el('option',text);option.value=value;input.append(option)}}else{input=el(field.type==='textarea'?'textarea':'input');if(input.tagName==='INPUT')input.type=field.type||'text';else input.rows=4}if(field.accept)input.accept=field.accept;input.name=field.name;input.required=field.required!==false;input.maxLength=field.max||5000;label.append(input);f.append(label)}const button=el('button',buttonText,'button');button.type='submit';const status=el('p');status.setAttribute('role','status');f.append(button,status);f.onsubmit=async e=>{e.preventDefault();if(!f.reportValidity())return;button.disabled=true;status.textContent='Savingâ€¦';try{const result=await submit(Object.fromEntries(new FormData(f)));status.textContent=result?.message||'Saved.'}catch(error){status.textContent=error.message}finally{button.disabled=false}};return f}
+
+ function showMaterials(container,files){for(const file of files||[]){const section=el('section',undefined,'learner-material');section.append(el('h3',file.title));if(file.kind==='video'&&file.source==='link'){let embed;try{const u=new URL(file.url);if(['youtube.com','www.youtube.com','m.youtube.com','youtu.be'].includes(u.hostname)){const id=u.hostname==='youtu.be'?u.pathname.slice(1):u.searchParams.get('v')||u.pathname.split('/').pop();if(/^[\w-]{11}$/.test(id))embed='https://www.youtube-nocookie.com/embed/'+id;}else if(['vimeo.com','www.vimeo.com'].includes(u.hostname)&&/^\/\d+$/.test(u.pathname))embed='https://player.vimeo.com/video'+u.pathname;}catch{}if(embed){const frame=el('iframe');frame.src=embed;frame.title=file.title;frame.loading='lazy';frame.allow='fullscreen; picture-in-picture';frame.style.cssText='width:100%;aspect-ratio:16/9;border:0';section.append(frame)}else if(/\.(mp4|webm)(\?|$)/i.test(file.url)){const video=el('video');video.src=file.url;video.controls=true;video.preload='metadata';video.style.width='100%';section.append(video)}section.append(safeLink('Watch training video',file.url));}else if(file.kind==='video'){const video=el('video');video.controls=true;video.preload='metadata';video.src=file.url;video.style.width='100%';video.setAttribute('aria-label',file.title);section.append(video)}else section.append(safeLink('Download Vypax notes',file.url));container.append(section)}}
+ function safeLink(label,url){try{const parsed=new URL(url,location.href);if(!['https:','http:'].includes(parsed.protocol))return el('p','Link awaiting confirmation.');const link=a(label,parsed.href);link.target='_blank';link.rel='noopener';return link}catch{return el('p','Link coming soon.')}}
+
+ try{
+
+ const {user}=await api('auth/me');if(!user){location.href='account.html?next='+encodeURIComponent('portal.html'+location.search);return}
+
+ root.replaceChildren();const navigation=el('div',undefined,'actions');navigation.append(a('Dashboard','portal.html'),a('Skills','skills.html'),a('Placement Opportunities','portal.html?view=placements'));if(user.role==='ADMIN')navigation.append(a('Administration','admin.html'));const logout=el('button','Sign out','button outline');logout.onclick=async()=>{await api('auth/logout',{});location.href='index.html'};navigation.append(logout);root.append(navigation);
+
+ async function sendPaymentProof(id,values){let receiptUploadId;if(values.receiptImage?.size){if(values.receiptImage.size>5*1024*1024)throw Error('Receipt image must be under 5 MB.');const payload=new FormData();payload.append('file',values.receiptImage);const response=await fetch('/api/payments/receipt-upload?id='+encodeURIComponent(id),{method:'POST',body:payload});const result=await response.json();if(!response.ok)throw Error(result.error||'Receipt upload failed.');receiptUploadId=result.uploadId;}return api('payments/proof',{id,reference:values.reference,receiptUploadId});}
+ async function checkout(id){const order=await api('portal/checkout',{id});if(!window.Razorpay){await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://checkout.razorpay.com/v1/checkout.js';script.onload=resolve;script.onerror=()=>reject(Error('Checkout could not load. Please try again.'));document.head.append(script)})}const widget=new window.Razorpay({key:order.keyId,order_id:order.orderId,amount:order.amount,currency:order.currency,name:'Vypax Technologies',description:'Paid internship',prefill:{name:user.name,email:user.email,contact:user.phone},handler:async result=>{try{await api('portal/payment-confirm',{id,paymentId:result.razorpay_payment_id,signature:result.razorpay_signature});location.reload()}catch(error){alert(error.message)}}});widget.open();}
+
+ async function showPlacements(){const {jobs}=await api('portal/jobs');root.append(el('h2','Placement Opportunities'),el('p','Explore current openings published by the Vypax team.'));const grid=el('div',undefined,'dashboard-learning');for(const job of jobs){const card=el('article');card.append(el('p',job.status||'Applications open','eyebrow'),el('h3',job.name),el('p',job.description),el('p',job.location||'Contact the team for location details'));if(job.requirements?.length){const list=el('ul');for(const requirement of job.requirements)list.append(el('li',requirement));card.append(list)}card.append(a('Apply for this role','career-application.html?role='+encodeURIComponent(job.name)));grid.append(card)}if(!jobs.length)grid.append(el('p','New placement opportunities will appear here when published.'));root.append(grid);}
+ if(params.get('view')==='placements'){await showPlacements();return;}
+ if(params.get('payment')){
+
+ const paymentId=params.get('payment');const panel=el('section',undefined,'payment-panel');root.append(panel);let watcher,lastPaymentStatus;
+
+ async function showPayment(){const data=await api('payments/panel?id='+encodeURIComponent(paymentId));if(data.status==='VERIFIED'){location.replace(data.target);return}if(lastPaymentStatus===data.status)return;lastPaymentStatus=data.status;panel.replaceChildren(el('p','PAYMENT & ACCESS','eyebrow'),el('h1',data.title),el('p','Amount: \u20b9'+data.fee),el('p','Status: '+data.status));if(data.feedback)panel.append(el('p',data.feedback));
+
+ if(data.status==='PENDING'){panel.append(el('h2','Payment awaiting verification'),el('p','This page checks for approval automatically. Your workspace opens as soon as Vypax verifies payment. Do not pay again while verification is pending.'));}
+
+ if(data.qr&&data.upiUrl){const image=el('img');image.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(data.qr);image.alt='Scan to pay '+data.recipient+' \u20b9'+data.fee+' using UPI';image.width=256;image.height=256;if(data.qrImage){const crop=el('div',undefined,'payment-scanner-image');image.src=data.qrImage;image.removeAttribute('width');image.removeAttribute('height');image.alt='Scan the supplied payment QR for '+data.recipient;crop.append(image);panel.append(crop,el('p','Enter the exact amount of ₹'+data.fee+' when scanning this QR.'));}else panel.append(image,el('p','This QR includes your selected fee of \u20b9'+data.fee+' and your application reference.'));panel.append(el('p','Payee: '+data.recipient),el('p','UPI ID: '+data.upi),a('Pay using UPI app',data.upiUrl,'button'),el('p','Check the recipient and amount in your UPI app before paying.'));}else panel.append(el('p','UPI payment details are awaiting confirmation from Vypax. Contact the Vypax team through the enquiry form before making any payment.'));
+
+ if(data.status==='PENDING'){const check=el('button','Verify Payment','button outline'),message=el('p');message.setAttribute('role','status');check.onclick=async()=>{check.disabled=true;message.textContent='Checking payment approval…';try{const latest=await api('payments/panel?id='+encodeURIComponent(paymentId));if(latest.status==='VERIFIED'){location.replace(latest.target);return}message.textContent=latest.status==='PENDING'?'Your payment is still awaiting review by Vypax.':latest.feedback||'Payment status: '+latest.status;if(latest.status!==data.status)await showPayment();}catch(error){message.textContent=error.message}finally{check.disabled=false}};panel.append(check,message);return;}
+
+ const openProof=el('button','Verify Payment','button');const proofSection=el('section',undefined,'payment-proof-section');proofSection.hidden=true;proofSection.id='payment-proof-form';openProof.setAttribute('aria-controls',proofSection.id);openProof.setAttribute('aria-expanded','false');proofSection.append(el('h2','Request payment verification'),el('p','Enter your transaction ID and upload your receipt. Vypax reviews the payment before your internship starts.'));const proofForm=form([{name:'reference',label:'Transaction ID / UTR'},{name:'receiptImage',label:'Receipt image (PNG, JPG or WEBP, max 5 MB)',type:'file',accept:'.png,.jpg,.jpeg,.webp'}],'Verify Payment',async values=>{const result=await sendPaymentProof(paymentId,values);await showPayment();return result});const skip=el('button','Skip','button outline');skip.type='button';skip.onclick=()=>{proofSection.hidden=true;openProof.hidden=false;openProof.setAttribute('aria-expanded','false');openProof.focus()};proofForm.append(skip);proofSection.append(proofForm,el('p','Skipping keeps your application saved. Modules stay locked until payment approval.','fine'));openProof.onclick=()=>{proofSection.hidden=false;openProof.hidden=true;openProof.setAttribute('aria-expanded','true');proofForm.querySelector('input').focus()};panel.append(openProof,proofSection);
+}
+
+ await showPayment();watcher=setInterval(()=>{if(!document.hidden)showPayment().catch(()=>{})},30000);window.addEventListener('pagehide',()=>clearInterval(watcher),{once:true});return;
+
+ }
+
+ const type=params.get('type'),id=params.get('id');
+
+ if(type&&id){
+
+  const data=await api('portal/content?type='+encodeURIComponent(type)+'&id='+encodeURIComponent(id));root.append(el('p',type.toUpperCase(),'eyebrow'),el('h1',data.name),el('p',data.description,'intro'));
+
+  if(type==='hackathons'&&data.locked){root.append(el('h2','Apply & pay to open your hackathon workspace'),el('p','Entry: '+data.fee),el('p','The round schedule, submissions and session links unlock after payment approval.'));const application=a('Apply & continue to payment','https://forms.gle/DvEwSkuK6WjUtT6v6','button');application.target='_blank';application.rel='noopener noreferrer';root.append(application,el('p','Submit the application form, then return here to complete payment.'));const apply=el('button','Continue to QR / UPI payment','button outline');apply.onclick=async()=>{apply.disabled=true;try{const result=await api('payments/event-apply',{event:id});location.href='portal.html?payment='+encodeURIComponent(result.id)}catch(error){root.append(el('p',error.message));apply.disabled=false}};root.append(apply);return;}
+
+  if(type==='courses'){
+
+   root.append(el('p','Coming soon','status-chip'),el('h2','Curriculum & syllabus'));const list=el('ol');(data.curriculum||[]).forEach(item=>list.append(el('li',item)));root.append(list,el('h3','Training price'),el('p',data.configuration.price?String(data.configuration.price):'Coming soon â€” price and batch dates will be announced.'),el('h3','Program brief'),el('p',data.syllabus),a('Ask about this course','contact.html?type=Training&interest='+encodeURIComponent(data.name)+'#enquiry'));
+
+   if(data.paymentEnabled===true&&/(?:₹|INR|Rs\.?)\s*[\d,]+/i.test(String(data.price||data.fee||''))){const pay=el('button','Training payment — QR / UPI','button');pay.onclick=async()=>{pay.disabled=true;try{const result=await api('payments/training-apply',{course:id});location.href='portal.html?payment='+encodeURIComponent(result.id)}catch(error){root.append(el('p',error.message));pay.disabled=false}};root.append(pay);}
+   root.append(el('h2','Training notes & videos'));for(const note of data.notes||[])root.append(el('h3',note.title),el('p',note.text));showMaterials(root,data.materials);if(!data.notes?.length&&!data.materials?.length)root.append(el('p','Vypax will upload learning materials here.'));
+  }else if(type==='hackathons'){
+
+   if(data.judgesEnabled&&data.judges?.length){root.append(el('h2','Our judges'));const judges=el('div',undefined,'cards three');for(const judge of data.judges){const card=el('article',undefined,'judge-card');if(judge.photo){const photo=el('img');photo.src=judge.photo;photo.alt=judge.name;photo.loading='lazy';card.append(photo)}card.append(el('h3',judge.name),el('p',judge.role),el('p',judge.bio));judges.append(card)}root.append(judges);}
+   root.append(el('p','Entry: '+(data.fee||'Coming soon')),el('p','Team: '+(data.team||'Coming soon')));if(data.awards){const awards=el('ul');data.awards.forEach(x=>awards.append(el('li',x)));root.append(awards)}
+
+   if(id!=='hackathon-2026'){if(data.schedule?.length){root.append(el('h2','Event schedule'));for(const [title,date]of data.schedule)root.append(el('h3',title),el('p',date));}else root.append(el('h2','Details coming soon'),el('p','Round dates will be published here.'));if(data.applicationUrl)root.append(safeLink('Apply Now',data.applicationUrl));for(const key of ['meetUrl','zoomUrl'])if(data.configuration[key])root.append(safeLink('Join live session',data.configuration[key]));return}
+
+   root.append(el('h2','November 2026 schedule'));const schedule=el('div',undefined,'portal-schedule');data.schedule.forEach(([title,date])=>{const card=el('article');card.append(el('h3',title),el('p',date));schedule.append(card)});root.append(schedule,el('p','All dates use India Standard Time (IST).'));
+
+   root.append(el('h2','Round submissions'),el('p','Round 1: upload your idea document or PPT on 12–13 November. Round 2: submit your LinkedIn video post link on 18–20 November, if selected.'));
+
+   const roundSelect=el('select');roundSelect.setAttribute('aria-label','Submission round');for(const [value,text] of [['idea','Round 1 — Idea'],['video','Round 2 — Video']]){const option=el('option',text);option.value=value;roundSelect.append(option)}const roundLabel=el('label','Round');roundLabel.append(roundSelect);const roundForm=el('div');root.append(roundLabel,roundForm);
+
+   function renderRound(){const round=roundSelect.value;roundForm.replaceChildren(form([{name:'title',label:'Team / project title'},round==='idea'?{name:'file',label:'Idea document / PPT — upload from device (max 5 MB)',type:'file',accept:'.pdf,.doc,.docx,.ppt,.pptx'}:{name:'url',label:'Video link (LinkedIn post link)',type:'url'},{name:'description',label:'Project description',type:'textarea'}],'Submit '+(round==='idea'?'idea':'video'),async values=>{let uploadId;if(round==='idea'){const payload=new FormData();payload.append('file',values.file);const response=await fetch('/api/portal/hackathon-upload',{method:'POST',body:payload});const result=await response.json();if(!response.ok)throw Error(result.error||'Upload failed.');uploadId=result.uploadId}return api('portal/hackathon',{title:values.title,description:values.description,url:values.url,uploadId,event:id,round})}));}roundSelect.onchange=renderRound;renderRound();
+
+   root.append(el('h2','Selected students & winners'));const results=await api('portal/results');for(const [key,value]of Object.entries(results)){root.append(el('h3',({round1:'Round 1 selected students',round2:'Round 2 selected students',winners:'Winners'})[key]),el('pre',typeof value==='string'?value:JSON.stringify(value,null,2),'portal-result'))}
+
+   root.append(el('h2','Live final â€” 30 November'));const live=data.configuration;let configured=false;for(const key of ['meetUrl','zoomUrl'])if(live[key]){root.append(safeLink(key==='meetUrl'?'Join Google Meet':'Join Zoom',live[key]));configured=true}if(!configured)root.append(el('p','Google Meet and Zoom links are coming soon. They will appear here after Vypax publishes them.'));
+
+  }else if(type==='internships'){
+
+   root.append(el('h2','Choose your internship duration'),el('p','1 month \u20b9499 Â· 2 months \u20b9999 Â· 3 months \u20b91,299 Â· 6 months \u20b91,999. Projects and notes unlock after payment is verified. These are applicant fees, not a salary.'));
+
+   root.append(form([{name:'months',label:'Duration',options:[['1','1 month â€” \u20b9499'],['2','2 months â€” \u20b9999'],['3','3 months â€” \u20b91,299'],['6','6 months â€” \u20b91,999']]}],'Create internship application',async values=>{const application=await api('portal/internship',{domain:id,months:Number(values.months)});location.href='portal.html?payment='+encodeURIComponent(application.id)}));root.append(a('View my internship workspace','portal.html'));const months=params.get('months');if(['1','2','3','6'].includes(months)){root.querySelector('select[name=months]').value=months;}
+
+  }
+
+  return;
+
+ }
+
+ const data=await api('portal/dashboard');const heading=el('div',undefined,'dashboard-heading');heading.append(el('p','MY LEARNING WORKSPACE','eyebrow'),el('h1','Welcome back, '+user.name),el('p','Continue your learning, track internship milestones and manage your certificates.'));root.append(heading);const metrics=el('div',undefined,'dashboard-metrics');const skillEntries=Object.entries(data.skillProgress.skills||{});for(const [label,value]of [['Skills in progress',skillEntries.filter(([,v])=>v.completed.length>0&&!v.certificate).length],['Certificates',skillEntries.filter(([,v])=>v.certificate).length+data.internships.filter(x=>x.certificate).length],['Internships',data.internships.length],['Projects submitted',data.submissions.length]]){const card=el('article');card.append(el('strong',String(value)),el('span',label));metrics.append(card)}root.append(metrics);const continueGrid=el('div',undefined,'dashboard-learning');for(const [slug,progress]of skillEntries.filter(([,v])=>v.completed.length&&!v.certificate)){const card=el('article');card.append(el('h3',slug.replaceAll('-',' ')),el('p',progress.completed.length+' of 10 chapters complete'));const bar=el('progress');bar.max=10;bar.value=progress.completed.length;bar.setAttribute('aria-label','Learning progress');card.append(bar,a('Continue learning','skill.html?skill='+encodeURIComponent(slug)));continueGrid.append(card)}if(continueGrid.children.length)root.append(el('h2','Continue learning'),continueGrid);const shortcuts=el('div',undefined,'actions');shortcuts.append(a('Browse training','programs.html'),a('Browse hackathons','hackathons.html'),a('Browse internships','internships.html'),a('Placement Opportunities','portal.html?view=placements'));root.append(shortcuts);
+
+ const certificates=Object.values(data.skillProgress.skills||{}).map(x=>x.certificate).filter(Boolean);if(certificates.length){root.append(el('h2','Skill certificates'));certificates.forEach(c=>root.append(a(c.skillName+' â€” '+c.name,'skill.html?skill='+encodeURIComponent(Object.entries(data.skillProgress.skills).find(([,v])=>v.certificate?.id===c.id)?.[0]))))}
+
+ root.append(el('h2','Your internships'));if(!data.internships.length)root.append(el('p','No internship application yet. Choose a domain to get started.'));
+
+ const instructions=await api('portal/payment-instructions');const paymentOptions=await api('portal/payment-options');
+
+ for(const internship of data.internships){const card=el('article',undefined,'portal-internship');card.id='internship-'+internship.id;if(['AWAITING_PAYMENT','REJECTED','PENDING'].includes(internship.status))card.append(a('Scan QR / Pay with UPI','portal.html?payment='+encodeURIComponent(internship.id),'button')); card.append(el('h3',internship.domain.replace('internship-','').replaceAll('-',' ')+' Â· '+internship.months+' month(s)'),el('p','Status: '+internship.status),el('p','Fee: \u20b9'+internship.fee));
+
+  if(['AWAITING_PAYMENT','REJECTED'].includes(internship.status)){if(paymentOptions.online){const pay=el('button','Pay securely with Razorpay','button');pay.onclick=async()=>{pay.disabled=true;try{await checkout(internship.id)}catch(error){card.append(el('p',error.message))}finally{pay.disabled=false}};card.append(pay)}else card.append(el('p','Online checkout is coming soon. Use confirmed payment instructions below.'));card.append(el('p',typeof instructions.instructions==='string'?instructions.instructions:JSON.stringify(instructions.instructions)),form([{name:'reference',label:'Transaction reference'},{name:'receiptImage',label:'Receipt image (optional, max 5 MB)',type:'file',accept:'.png,.jpg,.jpeg,.webp',required:false}],'Verify Payment',async values=>{const result=await sendPaymentProof(internship.id,values);location.reload();return result}));}
+
+  if(internship.feedback)card.append(el('p','Reviewer feedback: '+internship.feedback));
+
+  if(internship.status==='VERIFIED'){
+
+   card.append(el('p','Starts: '+new Date(internship.startedAt).toLocaleDateString('en-IN')+' Â· Ends: '+new Date(internship.endsAt).toLocaleDateString('en-IN')),el('h3','Learning notes'));
+
+   internship.notes.forEach(note=>{const block=el('details');block.append(el('summary',note.title),el('p',note.text));card.append(block)});internship.resources.forEach(resource=>card.append(safeLink(resource.title,resource.url)));
+
+   card.append(el('h3','Released projects'));internship.projects.forEach(project=>{const section=el('section');section.append(el('h3','Month '+project.month+': '+project.title),el('p',project.brief));const ul=el('ul');project.deliverables.forEach(x=>ul.append(el('li',x)));section.append(ul,form([{name:'url',label:'Project / repository link',type:'url'},{name:'description',label:'What you built and tested',type:'textarea'}],'Submit project',values=>api('portal/project',{...values,id:internship.id,month:project.month})));card.append(section)});
+
+   if(internship.projects.length<internship.months)card.append(el('p','The next project unlocks one calendar month after the previous release.'));
+
+   card.append(el('h3','Monthly assessments'));
+
+   showMaterials(card,internship.materials);
+  for(const assessment of internship.assessments||[]){const section=el('section');section.append(el('h4','Month '+assessment.month+' Â· 20 questions'),el('p',assessment.unlocked?'Assessment available':'Opens '+new Date(assessment.opensAt).toLocaleDateString('en-IN')));for(const attempt of assessment.attempts) section.append(el('p',attempt.score+'/20 â€” '+(attempt.passed?'Passed':'Review and try again')));if(assessment.unlocked){const start=el('button','Take monthly assessment','button outline');start.onclick=async()=>{start.disabled=true;try{const assessmentData=await api('portal/internship-assessment?id='+encodeURIComponent(internship.id)+'&month='+assessment.month);const quiz=el('form',undefined,'skill-assessment');assessmentData.questions.forEach((q,i)=>{const field=el('fieldset');field.append(el('legend',(i+1)+'. '+q.prompt));q.options.forEach((option,value)=>{const label=el('label',undefined,'assessment-option'),radio=el('input');radio.type='radio';radio.name=q.id;radio.value=value;radio.required=true;label.append(radio,el('span',option));field.append(label)});quiz.append(field)});const submit=el('button','Submit assessment','button'),status=el('p');submit.type='submit';status.setAttribute('role','status');quiz.append(submit,status);quiz.onsubmit=async e=>{e.preventDefault();if(!quiz.reportValidity())return;submit.disabled=true;try{const values=new FormData(quiz);const result=await api('portal/internship-assessment',{id:internship.id,month:assessment.month,answers:assessmentData.questions.map(q=>Number(values.get(q.id)))});status.textContent=result.score+'/20 â€” '+(result.passed?'Passed':'Review the notes before trying again.');quiz.querySelectorAll('input').forEach(x=>x.disabled=true)}catch(error){status.textContent=error.message;submit.disabled=false}};section.append(quiz);start.hidden=true}catch(error){section.append(el('p',error.message));start.disabled=false}};section.append(start)}card.append(section)}
+
+   if(internship.certificate){const certificate=a('Download internship certificate','/api/portal/certificate?id='+encodeURIComponent(internship.certificate.id),'button');certificate.download='Vypax-internship-certificate.svg';card.append(certificate)}else card.append(el('p','Your participation certificate becomes available after the selected duration ends.'));
+
+  }root.append(card);
+
+ }
+
+ if(data.hackathonEnrollments?.length){root.append(el('h2','Your hackathons'));for(const enrollment of data.hackathonEnrollments){const card=el('article',undefined,'portal-internship');card.append(el('h3',enrollment.data.event.replaceAll('-',' ')),el('p','Payment: '+enrollment.data.status),a(enrollment.data.status==='VERIFIED'?'Open hackathon workspace':'Scan QR / Pay with UPI',enrollment.data.status==='VERIFIED'?'portal.html?type=hackathons&id='+encodeURIComponent(enrollment.data.event):'portal.html?payment='+encodeURIComponent(enrollment.id)));root.append(card)}}
+
+ if(params.get('internship'))document.getElementById('internship-'+params.get('internship'))?.scrollIntoView({block:'start'});
+
+ root.append(el('h2','Your submissions'));if(!data.submissions.length&&!data.hackathonSubmissions.length)root.append(el('p','No submissions yet.'));[...data.submissions,...data.hackathonSubmissions].forEach(row=>{const card=el('article');card.append(el('h3',row.data.title||'Month '+row.data.month+' project'),el('p',row.data.description),safeLink('View submitted work',row.data.url),el('p','Submitted '+new Date(row.created_at).toLocaleString('en-IN')));root.append(card)});
+
+ }catch(error){root.append(el('p',error.message,'learning-status'))}
+
+})();
+

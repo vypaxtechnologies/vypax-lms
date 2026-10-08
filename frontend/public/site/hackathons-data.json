@@ -1,0 +1,141 @@
+{
+  "checkedOn": "2026-10-04",
+  "source": "https://vypaxedutech.pages.dev/",
+  "events": [
+    {
+      "slug": "hackathon-2026",
+      "name": "Hackathon November 2026",
+      "status": "Registration open",
+      "fee": "₹99 per person",
+      "team": "2–4 members",
+      "theme": "App & Web Development",
+      "deadline": "10 November 2026",
+      "venue": "Remote / Virtual",
+      "prize": "Up to ₹1,00,000",
+      "description": "A four-stage competition: register a team, develop your concept, submit a working project and compete for a place in the top-30 final.",
+      "stages": [
+        [
+          "Registration",
+          "By 10 November 2026",
+          "Register your team before the deadline."
+        ],
+        [
+          "Round 1 — Idea submission",
+          "12–13 November 2026",
+          "Submit your idea through the signed-in workspace."
+        ],
+        [
+          "Round 2 — Video submission",
+          "18–20 November 2026",
+          "Selected participants submit their demo video."
+        ],
+        [
+          "Final round",
+          "30 November 2026",
+          "Present your project in the virtual final."
+        ],
+        [
+          "Winner announcement",
+          "3 December 2026",
+          "Results are published in the workspace."
+        ]
+      ],
+      "awards": [
+        [
+          "1st–3rd place",
+          "Cash prize, trophy and hard-copy certificate"
+        ],
+        [
+          "4th–5th place",
+          "Medal and hard-copy certificate"
+        ],
+        [
+          "6th–10th place",
+          "Hard-copy certificate"
+        ],
+        [
+          "All participants",
+          "Soft-copy certificate"
+        ]
+      ],
+      "registration": "https://forms.gle/DvEwSkuK6WjUtT6v6",
+      "cta": "Register your team",
+      "note": "Prize amounts are stated as “up to” figures and are not guaranteed. Individual cash allocations are not published."
+    },
+    {
+      "slug": "hackathon-for-professionals",
+      "name": "Prahar",
+      "status": "Coming soon",
+      "fee": "₹0 — Free",
+      "team": "1–2 members",
+      "theme": "To be announced",
+      "deadline": "To be confirmed",
+      "venue": "To be announced",
+      "prize": "Trophies, medals and certificates",
+      "description": "A hackathon where students and professionals compete together. Submit your idea, build a working project and showcase your skills in the final competition.",
+      "stages": [
+        [
+          "Idea submission",
+          "21 May 2027",
+          "Submit the idea and proposed build plan."
+        ],
+        [
+          "Project submission",
+          "10 June 2027",
+          "Submit the working project."
+        ],
+        [
+          "Final round",
+          "12 June 2027",
+          "Final duration awaits organizer confirmation."
+        ]
+      ],
+      "awards": [
+        [
+          "1st, 2nd & 3rd place",
+          "Trophy + Certificate"
+        ],
+        [
+          "4th & 5th place",
+          "Medal + Certificate"
+        ],
+        [
+          "All participants",
+          "Certificate of Participation"
+        ]
+      ],
+      "registration": "https://vypaxedutech.pages.dev/hackathons/hackathon-for-professionals",
+      "cta": "View official updates",
+      "note": "The source lists both 12-hour and 24-hour final-round durations. Confirm the final duration with the organizers. Its detailed page does not confirm a registration deadline; 21 May 2027 is listed as the idea-submission date.",
+      "updatedBy": "Vypax owner instruction",
+      "updatedOn": "2026-10-03",
+      "audience": "Students and professionals"
+    },
+    {
+      "slug": "hackathon-march-2027",
+      "name": "Hackathon March 2027",
+      "status": "Coming soon",
+      "fee": "₹99 per person",
+      "team": "2–4 members",
+      "theme": "App & Web Development",
+      "deadline": "To be announced",
+      "venue": "Remote",
+      "prize": "To be announced",
+      "description": "The next student and developer edition is being planned. Round dates, judging details and the prize structure are awaiting publication.",
+      "stages": [],
+      "awards": [
+        [
+          "Participants",
+          "Hard-copy certificate, according to the published edition page"
+        ],
+        [
+          "Prize pool",
+          "To be announced"
+        ]
+      ],
+      "registration": "https://vypaxedutech.pages.dev/hackathons/hackathon-march-2027",
+      "cta": "View official updates",
+      "note": "Registration dates, round schedule, judging criteria and prize details have not yet been published."
+    }
+  ]
+}

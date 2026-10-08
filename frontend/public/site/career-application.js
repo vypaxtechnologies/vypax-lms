@@ -1,0 +1,14 @@
+// Career applications have a dedicated form, separate from training and service enquiries.
+(async()=>{
+const form=document.querySelector("#career-application-form"),role=document.querySelector("#career-role"),experience=document.querySelector("#candidate-experience"),fields=document.querySelector("#experienced-fields"),resume=document.querySelector("#candidate-resume"),status=document.querySelector("#career-form-status");
+const roles={"Business Development Executive":{experience:"Fresher"},"Sales Executive":{},"Lead Generation Executive":{},"HR Intern":{experience:"Fresher"}};
+function updateRole(){const data=roles[role.value],summary=document.querySelector("#selected-role-summary");summary.replaceChildren();if(data){const title=document.createElement("strong");title.textContent=role.value;summary.append(title);if(data.experience){const note=document.createElement("p");note.textContent="Opening for freshers";summary.append(note);experience.value="Fresher";updateExperience()}}document.querySelector("#career-subject").value="Vypax Career Application — "+(role.value||"New candidate")}
+function updateExperience(){const experienced=experience.value==="Experienced";fields.hidden=!experienced;fields.querySelectorAll("input").forEach(input=>{input.disabled=!experienced;input.required=experienced&&input.name!=="current_ctc"})}
+try{const response=await fetch('/api/catalog');if(response.ok){const catalog=await response.json();role.replaceChildren(new Option('Choose an opening',''));for(const job of Object.values(catalog.jobs)){roles[job.name]={};role.add(new Option(job.name,job.name));}}}catch{}
+const requested=new URLSearchParams(location.search).get("role");if(roles[requested])role.value=requested;updateRole();updateExperience();
+role.addEventListener("change",updateRole);experience.addEventListener("change",updateExperience);
+function validateResume(){resume.setCustomValidity("");const file=resume.files?.[0];if(file&&(!/\.(pdf|doc|docx)$/i.test(file.name)||file.size>5*1024*1024))resume.setCustomValidity("Choose a PDF, DOC or DOCX résumé no larger than 5 MB.")}
+resume.addEventListener("change",validateResume);
+form.addEventListener("submit",event=>{if(location.protocol==="file:"){event.preventDefault();status.textContent="Extract the website ZIP and double-click Launch Website.cmd before submitting. Career applications require a web server.";return}validateResume();if(!form.reportValidity()){event.preventDefault();return}status.textContent="Continuing to the form service to submit your application…";});
+})();
+
