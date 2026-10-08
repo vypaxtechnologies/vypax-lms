@@ -21,19 +21,19 @@
     ...programs.map(p => [`Tell me about ${p[1]}`, `${p[1]} lasts ${p[2]} months. ${p[3]}\n\nTopics: ${p[4].split('|').join(', ')}. View the program page to enquire.`]),
   ];
   let visitor = null, pendingQueries = [], sending = false;
-  const contactForm=document.createElement('div');contactForm.className='chat-intro';
-  contactForm.innerHTML='<p class="chat-bubble assistant">Welcome! What should we call you? <small>Name and mobile are optional. You can skip both.</small></p><label class="visually-hidden" for="chat-intro-reply">Your reply (optional)</label><input id="chat-intro-reply" type="text" autocomplete="name" maxlength="100" placeholder="Type your name, or skip"><div class="chat-intro-actions"><button type="button" id="chat-intro-next">Continue</button><button type="button" id="chat-intro-skip">Skip</button></div><p class="fine">When you close the chat, your selected questions and any details you choose to share are saved and sent to the relevant Vypax team.</p>';
+  const contactForm = document.createElement('div'); contactForm.className = 'chat-intro';
+  contactForm.innerHTML = '<p class="chat-bubble assistant">Welcome! What should we call you? <small>Name and mobile are optional. You can skip both.</small></p><label class="visually-hidden" for="chat-intro-reply">Your reply (optional)</label><input id="chat-intro-reply" type="text" autocomplete="name" maxlength="100" placeholder="Type your name, or skip"><div class="chat-intro-actions"><button type="button" id="chat-intro-next">Continue</button><button type="button" id="chat-intro-skip">Skip</button></div><p class="fine">When you close the chat, your selected questions and any details you choose to share are saved and sent to the relevant Vypax team.</p>';
   panel.querySelector('.assistant-notice').after(contactForm);
-  const chatParts=[messages,form,panel.querySelector('.assistant-prompts'),panel.querySelector('.assistant-foot')];
-  function intake(show){contactForm.hidden=!show;chatParts.forEach(part=>part.hidden=show)}
-  intake(true);let introStep=0,introName='';const introReply=contactForm.querySelector('input'),introBubble=contactForm.querySelector('.chat-bubble');
-  function advanceIntro(skip=false){
-    if(introStep===0){introName=skip?'':introReply.value.trim();introStep=1;introBubble.textContent='Would you like to share a mobile number so our team can follow up? This is optional.';introReply.value='';introReply.type='tel';introReply.autocomplete='tel';introReply.maxLength=20;introReply.placeholder='Type your mobile number, or skip';introReply.focus();return;}
-    const phone=skip?'':introReply.value.trim();if(phone&&!/^[+0-9 ()-]{7,20}$/.test(phone)){introBubble.textContent='Please enter a valid mobile number, or select Skip.';return;}
-    visitor={name:introName,phone};intake(false);input.focus();
+  const chatParts = [messages, form, panel.querySelector('.assistant-prompts'), panel.querySelector('.assistant-foot')];
+  function intake(show) { contactForm.hidden = !show; chatParts.forEach(part => part.hidden = show) }
+  intake(true); let introStep = 0, introName = ''; const introReply = contactForm.querySelector('input'), introBubble = contactForm.querySelector('.chat-bubble');
+  function advanceIntro(skip = false) {
+    if (introStep === 0) { introName = skip ? '' : introReply.value.trim(); introStep = 1; introBubble.textContent = 'Would you like to share a mobile number so our team can follow up? This is optional.'; introReply.value = ''; introReply.type = 'tel'; introReply.autocomplete = 'tel'; introReply.maxLength = 20; introReply.placeholder = 'Type your mobile number, or skip'; introReply.focus(); return; }
+    const phone = skip ? '' : introReply.value.trim(); if (phone && !/^[+0-9 ()-]{7,20}$/.test(phone)) { introBubble.textContent = 'Please enter a valid mobile number, or select Skip.'; return; }
+    visitor = { name: introName, phone }; intake(false); input.focus();
   }
-  contactForm.querySelector('#chat-intro-next').onclick=()=>advanceIntro();contactForm.querySelector('#chat-intro-skip').onclick=()=>advanceIntro(true);
-  introReply.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();advanceIntro()}});
+  contactForm.querySelector('#chat-intro-next').onclick = () => advanceIntro(); contactForm.querySelector('#chat-intro-skip').onclick = () => advanceIntro(true);
+  introReply.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); advanceIntro() } });
   const delivery = document.createElement('div'); delivery.className = 'chat-delivery'; delivery.hidden = true; delivery.setAttribute('role', 'status');
   document.body.append(delivery);
   function deliveryMessage(message, retry = false) {
@@ -50,7 +50,7 @@
         const batch = pendingQueries.filter(item => item.category === category);
         if (!batch.length) continue;
         const email = category === 'Hackathon' ? 'vypaxtechlogies@gmail.com' : 'vypaxtechlogies@gmail.com';
-        const response = await fetch('/api/enquiries', {
+        const response = await fetch('https://vypax-lms-backend.onrender.com/api/enquiries', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...visitor, category, message: batch.map(item => item.question + '\n' + item.answer).join('\n\n'), consent: true, chat: true }),
           signal: AbortSignal.timeout(15000)
@@ -82,7 +82,7 @@
   function answer(index) {
     const entry = questions[index];
     if (!entry || !visitor) return;
-    if (!pendingQueries.some(item => item.question === entry[0])) pendingQueries.push({question:entry[0], answer:entry[1], category:/hackathon|prahar/i.test(entry[0]) ? 'Hackathon' : 'Training'});
+    if (!pendingQueries.some(item => item.question === entry[0])) pendingQueries.push({ question: entry[0], answer: entry[1], category: /hackathon|prahar/i.test(entry[0]) ? 'Hackathon' : 'Training' });
     bubble(entry[0], 'user'); bubble(entry[1], 'assistant'); input.value = String(index);
     const hackathon = /hackathon|prahar/i.test(entry[0]);
     document.querySelector('#assistant-enquiry').href = hackathon ? 'hackathons.html#hackathon-enquiry' : 'contact.html?type=Training#enquiry';
