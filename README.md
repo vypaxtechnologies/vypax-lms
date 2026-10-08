@@ -5,7 +5,6 @@ This package contains the Vypax Technologies website migrated to a MERN-based pr
 ## Stack
 - React + Vite
 - Node.js + Express
-- MongoDB + Mongoose
 - FormSubmit.io for public form submissions
 
 ## Structure
