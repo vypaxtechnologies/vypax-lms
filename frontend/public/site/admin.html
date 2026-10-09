@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin Dashboard | Vypax Technologies</title>
+  <meta name="description" content="Administrator dashboard for Vypax Technologies.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="reference-theme.css">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <style>
+    .admin-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:18px;margin:30px 0}
+    .admin-summary article{border-top:3px solid var(--saffron)}
+    .admin-summary strong{display:block;font-size:34px;line-height:1.2}
+    .admin-table-wrap{overflow-x:auto}
+    .admin-table{width:100%;border-collapse:collapse;text-align:left}
+    .admin-table th,.admin-table td{padding:13px 16px;border-bottom:1px solid var(--line)}
+    .admin-table th{font-size:13px;color:var(--muted)}
+    #admin-status:empty{display:none}
+    @media(max-width:600px){.admin-table th,.admin-table td{padding:10px 8px;font-size:13px}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header>
+    <a class="brand" href="index.html"><img class="brand-logo" src="logo.svg" alt="Vypax Technologies logo" width="56" height="56"><span>VYPAX<small>TECHNOLOGIES</small></span></a>
+    <nav aria-label="Administrator navigation">
+      <a href="portal.html">Learner workspace</a>
+      <a href="index.html">Website</a>
+      <button class="button outline" id="admin-logout" type="button">Sign out</button>
+    </nav>
+  </header>
+  <main id="main" class="section">
+    <p class="eyebrow">VYPAX ADMINISTRATION</p>
+    <h1>Admin dashboard</h1>
+    <p id="admin-welcome" class="intro">Loading your dashboard…</p>
+    <p id="admin-status" role="status"></p>
+    <div id="admin-content" hidden>
+      <div class="admin-summary">
+        <article><p class="eyebrow">LEARNER ACCOUNTS</p><strong id="learner-count">0</strong><p>Registered learner accounts</p></article>
+        <article><p class="eyebrow">OPEN POSITIONS</p><strong id="position-count">0</strong><p>Current placement opportunities</p></article>
+      </div>
+      <section aria-labelledby="learners-heading">
+        <h2 id="learners-heading">Learner accounts</h2>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Joined</th></tr></thead>
+            <tbody id="learner-list"></tbody>
+          </table>
+        </div>
+        <p id="empty-learners" hidden>No learner accounts have been registered yet.</p>
+      </section>
+    </div>
+  </main>
+  <script src="admin.js" defer></script>
+</body>
+</html>

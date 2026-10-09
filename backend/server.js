@@ -5,7 +5,7 @@ const path=require('path');
 const fs=require('fs');
 const multer=require('multer');
 const {Resend}=require('resend');
-const {authRouter,connectDatabase,getDatabase,portalRouter,paymentRouter}=require('./auth');
+const {authRouter,connectDatabase,getDatabase,portalRouter,paymentRouter,adminRouter}=require('./auth');
 
 const app=express();
 const PORT=Number(process.env.PORT||5000);
@@ -38,6 +38,7 @@ app.use(upload.none());
 app.use('/api/auth',authRouter());
 app.use('/api/portal',portalRouter());
 app.use('/api/payments',paymentRouter());
+app.use('/api/admin',adminRouter());
 
 app.post('/api/enquiries',async(req,res)=>{
   if(!resend || !process.env.EMAIL_FROM || !process.env.EMAIL_TO){

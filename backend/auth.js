@@ -189,6 +189,13 @@ function authRequired(req, res, next) {
   next();
 }
 
+function adminRequired(req, res, next) {
+  if (req.user?.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Administrator access is required.' });
+  }
+  next();
+}
+
 function registerUser(req, res) {
   const { name, email, phone, password, consent } = req.body || {};
   const cleanName = String(name || '').trim();
@@ -449,9 +456,34 @@ function portalRouter() {
   return router;
 }
 
+function adminRouter() {
+  const router = express.Router();
+  router.use(authRequired, adminRequired);
+
+  router.get('/overview', (req, res) => {
+    const users = getUsers()
+      .filter((user) => user.role !== 'ADMIN')
+      .map((user) => ({
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt
+      }));
+
+    return res.json({
+      admin: sanitizeUser(req.user),
+      totalLearners: users.length,
+      openPositions: DEFAULT_JOBS.length,
+      learners: users
+    });
+  });
+
+  return router;
+}
+
 module.exports = {
   authRouter,
   portalRouter,
+  adminRouter,
   paymentRouter,
   connectDatabase: async () => true,
   getDatabase: () => null
