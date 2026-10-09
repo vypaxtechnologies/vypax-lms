@@ -50,7 +50,7 @@
         const batch = pendingQueries.filter(item => item.category === category);
         if (!batch.length) continue;
         const email = category === 'Hackathon' ? 'vypaxtechlogies@gmail.com' : 'vypaxtechlogies@gmail.com';
-        const response = await fetch('/api/enquiries', {
+        const response = await fetch('https://vypax-lms-backend.onrender.com/api/enquiries', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...visitor, category, message: batch.map(item => item.question + '\n' + item.answer).join('\n\n'), consent: true, chat: true }),
           signal: AbortSignal.timeout(15000)
