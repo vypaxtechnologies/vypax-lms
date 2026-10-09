@@ -3,11 +3,11 @@ import {createRoot} from 'react-dom/client';
 import './shell.css';
 
 const knownPages = new Set([
-  'index.html','about.html','contact.html','services.html','skills.html','training.html',
+  'index.html','about.html','contact.html','services.html','skills.html','training.html','account.html','portal.html',
   'careers.html','hackathons.html','hackathon-2026.html','hackathon-for-professionals.html',
   'hackathon-march-2027.html','communication-registration.html','career-path.html','programs.html',
-  'internships.html','internship-application.html','certificate-demo.html','account.html',
-  'portal.html','admin.html','partner.html','lesson.html','learning.html','skill.html',
+  'internships.html','internship-application.html','certificate-demo.html',
+  'partner.html','lesson.html','skill.html',
   'career-application.html','program-full-stack-development.html','program-frontend-development.html',
   'program-backend-development.html','program-data-analyst.html','program-data-science.html',
   'program-generative-ai.html','program-human-resource.html','program-business-analytics.html',

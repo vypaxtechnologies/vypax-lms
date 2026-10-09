@@ -8,7 +8,7 @@
   const form = document.querySelector('#assistant-form');
   const questions = [
     ['What training programs are available?', programs.map(p => `${p[1]} — ${p[2]} months`).join('\n') + '\nExplore Programs for the curriculum and application details.'],
-    ['What hackathons are available?', 'November 2026: remote App & Web Development, teams of 2–4, ₹99 per person. Registration closes 10 November 2026. Prize pool up to ₹1,00,000.\n\nPrahar: Open to students and professionals competing together. Registration: ₹0 — Free, teams of 1–2. Awards: 1st–3rd receive a trophy and certificate; 4th–5th receive a medal and certificate. Every participant receives a certificate of participation. Round details are coming soon; final: coming soon.\n\nMarch 2027: ₹99 per person; schedule and awards to be announced. Sign in through View Hackathon Details for schedules and submission forms.'],
+    ['What hackathons are available?', 'November 2026: remote App & Web Development, teams of 2–4, ₹99 per person. Registration closes 10 November 2026. Prize pool up to ₹1,00,000.\n\nPrahar: Open to students and professionals competing together. Registration: ₹0 — Free, teams of 1–2. Awards: 1st–3rd receive a trophy and certificate; 4th–5th receive a medal and certificate. Every participant receives a certificate of participation. Round details are coming soon; final: coming soon.\n\nMarch 2027: ₹99 per person; schedule and awards to be announced. Open the event page for schedules and submission details.'],
     ['How do I apply for a program?', 'Open Programs, choose a course, and select Apply for This Program. Send your interest to discuss fees, batch availability and enrolment requirements. An enquiry does not confirm admission or payment.'],
     ['When does the next batch start?', 'Contact the team with your preferred program and timings to confirm the next batch and seat availability.'],
     ['How much does training cost?', 'Use the enquiry form on your selected program page to request current fees and payment terms.'],
@@ -22,7 +22,7 @@
   ];
   let visitor = null, pendingQueries = [], sending = false;
   const contactForm = document.createElement('div'); contactForm.className = 'chat-intro';
-  contactForm.innerHTML = '<p class="chat-bubble assistant">Welcome! What should we call you? <small>Name and mobile are optional. You can skip both.</small></p><label class="visually-hidden" for="chat-intro-reply">Your reply (optional)</label><input id="chat-intro-reply" type="text" autocomplete="name" maxlength="100" placeholder="Type your name, or skip"><div class="chat-intro-actions"><button type="button" id="chat-intro-next">Continue</button><button type="button" id="chat-intro-skip">Skip</button></div><p class="fine">When you close the chat, your selected questions and any details you choose to share are saved and sent to the relevant Vypax team.</p>';
+  contactForm.innerHTML = '<p class="chat-bubble assistant">Welcome! What should we call you? <small>Name and mobile are optional. You can skip both.</small></p><label class="visually-hidden" for="chat-intro-reply">Your reply (optional)</label><input id="chat-intro-reply" type="text" autocomplete="name" maxlength="100" placeholder="Type your name, or skip"><div class="chat-intro-actions"><button type="button" id="chat-intro-next">Continue</button><button type="button" id="chat-intro-skip">Skip</button></div><p class="fine">When you close the chat, your selected questions and any details you choose to share will be emailed to the relevant Vypax team.</p>';
   panel.querySelector('.assistant-notice').after(contactForm);
   const chatParts = [messages, form, panel.querySelector('.assistant-prompts'), panel.querySelector('.assistant-foot')];
   function intake(show) { contactForm.hidden = !show; chatParts.forEach(part => part.hidden = show) }
@@ -50,7 +50,7 @@
         const batch = pendingQueries.filter(item => item.category === category);
         if (!batch.length) continue;
         const email = category === 'Hackathon' ? 'vypaxtechlogies@gmail.com' : 'vypaxtechlogies@gmail.com';
-        const response = await fetch('https://vypax-lms-backend.onrender.com/api/enquiries', {
+        const response = await fetch('/api/enquiries', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...visitor, category, message: batch.map(item => item.question + '\n' + item.answer).join('\n\n'), consent: true, chat: true }),
           signal: AbortSignal.timeout(15000)
@@ -59,7 +59,7 @@
         if (!response.ok) throw new Error(result.error || 'Delivery failed');
         pendingQueries = pendingQueries.filter(item => !batch.includes(item));
       }
-      deliveryMessage('Your enquiry is saved for Vypax. An email notification is queued for the team.');
+      deliveryMessage('Your enquiry was emailed to Vypax.');
     } catch { deliveryMessage('We could not send your enquiry. Retry, or use Let’s Talk to contact Vypax.', true); }
     finally { sending = false; }
   }
@@ -70,7 +70,7 @@
     messages.append(node);
     messages.scrollTop = messages.scrollHeight;
   }
-  function welcome() { bubble('Welcome to Vypax! Choose a training or hackathon question for a prepared answer. For more help with your course or event, select Talk to our team.', 'assistant'); }
+  function welcome() { bubble('Welcome to Vypax! Choose a training or hackathon question for a prepared answer. For more help with your course or event, use the enquiry form.', 'assistant'); }
   function close() { panel.hidden = true; launcher.setAttribute('aria-expanded', 'false'); launcher.focus(); sendEnquiry(); }
   launcher.addEventListener('click', () => {
     if (!panel.hidden) return close();

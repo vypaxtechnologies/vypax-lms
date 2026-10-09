@@ -14,7 +14,7 @@
       note.setAttribute('role', 'status');
       form.append(note);
     }
-    note.textContent = 'Your submission is saved for the Vypax team.';
+    note.textContent = 'Your enquiry will be emailed to the Vypax team when you submit.';
   }
   const updateAll = () => document.querySelectorAll(selector).forEach(update);
   updateAll();
@@ -31,6 +31,9 @@
     if (location.protocol === 'file:') {
       event.preventDefault();
       event.target.querySelector('.enquiry-recipient').textContent = 'Open Launch Website.cmd before submitting, or email the team directly.';
+    } else {
+      const note = event.target.querySelector('.enquiry-recipient');
+      if (note) note.textContent = 'Submitting your enquiry…';
     }
   }, true);
 })();

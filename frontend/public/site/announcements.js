@@ -1,1 +1,8 @@
-(async()=>{const root=document.querySelector('#announcement-list');if(!root)return;const el=(tag,text)=>{const node=document.createElement(tag);node.textContent=text;return node};try{const response=await fetch('/api/catalog');if(!response.ok)throw Error();const data=await response.json();const items=Object.entries(data.announcements||{}).sort((a,b)=>(b[1].announcementDate||'').localeCompare(a[1].announcementDate||''));root.replaceChildren();for(const [id,item]of items){const card=el('article','');card.className='announcement-card';if(item.announcementDate)card.append(el('p',item.announcementDate));card.append(el('h3',item.name),el('p',item.description));if(item.applicationUrl){const link=el('a','Read more');link.href=item.applicationUrl;link.className='button outline';card.append(link)}root.append(card)}if(!items.length)root.append(el('p','No announcements yet. Check back for updates.'))}catch{root.replaceChildren(el('p','Announcements could not load. Please refresh to try again.'))}})();
+(() => {
+  const root = document.querySelector('#announcement-list');
+  if (!root) return;
+
+  const message = document.createElement('p');
+  message.textContent = 'No announcements are currently available.';
+  root.replaceChildren(message);
+})();

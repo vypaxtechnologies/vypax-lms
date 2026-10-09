@@ -16,6 +16,13 @@ function fillInterests(){if(!interest||!type)return;interest.replaceChildren(new
 fillInterests();type?.addEventListener("change",fillInterests);
 document.addEventListener("click",e=>{const a=e.target.closest("[data-interest]");if(a){if(type&&interest){type.value=a.dataset.type||"Placement support";fillInterests();interest.value=a.dataset.interest}else{e.preventDefault();location.href="contact.html?type="+encodeURIComponent(a.dataset.type||"Placement support")+"&interest="+encodeURIComponent(a.dataset.interest)+"#enquiry"}}});
 const menu=document.querySelector(".menu"),nav=document.querySelector("nav");
+if(nav&&!nav.querySelector(".account-nav")){
+  const accountLink=document.createElement("a");
+  accountLink.className="nav-partner-button account-nav";
+  accountLink.href="account.html";
+  accountLink.textContent="Sign Up / Login";
+  nav.append(accountLink);
+}
 function closeMenu(){menu.setAttribute("aria-expanded","false");nav.classList.remove("open")}
 menu.addEventListener("click",()=>{const open=menu.getAttribute("aria-expanded")!=="true";menu.setAttribute("aria-expanded",String(open));nav.classList.toggle("open",open)});
 nav.addEventListener("click",e=>{if(e.target.closest("a"))closeMenu()});
@@ -25,21 +32,24 @@ document.querySelector("#show-certificate")?.addEventListener("click",()=>dialog
 // Submit enquiry to backend API and send email via Resend
 document.querySelector("#enquiry-form")?.addEventListener("submit",async e=>{
   if(location.protocol==="file:"){e.preventDefault();document.querySelector("#form-status").textContent="Please extract the website ZIP and double-click Launch Website.cmd. Email forms require a web server. Use the contact page to reach our team.";return}
-  if(!e.currentTarget.reportValidity()){e.preventDefault();return}
+  const form=e.currentTarget;
+  if(!form.reportValidity()){e.preventDefault();return}
   e.preventDefault();
   const status=document.querySelector("#form-status");
-  const btn=e.currentTarget.querySelector("button[type=submit]");
+  const btn=form.querySelector("button[type=submit]");
   status.textContent="Sending enquiry…";
   if(btn)btn.disabled=true;
-  const formData=new FormData(e.currentTarget);
+  const formData=new FormData(form);
   try{
     const res=await fetch("/api/enquiries",{method:"POST",body:formData});
     const text=await res.text();
     let data;
     try{data=JSON.parse(text);}catch{data={ok:false,error:text};}
     if(res.ok && data.ok){
-      status.textContent="Form submitted. Our team will contact you soon.";
-      e.currentTarget.reset();
+      status.textContent="Form submitted successfully.";
+      const recipient=form.querySelector(".enquiry-recipient");
+      if(recipient)recipient.textContent="Form submitted successfully.";
+      try{form.reset();}catch(resetError){console.error("Enquiry submitted, but the form could not be reset.",resetError);}
     }else{
       status.textContent=data.error||"Failed to send enquiry. Please try again.";
     }

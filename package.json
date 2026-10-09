@@ -1,9 +1,9 @@
 {
-  "name": "vypax-technologies-mern",
+  "name": "vypax-technologies-website",
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "dev": "concurrently --raw --kill-others \"node backend/server.js\" \"npm --prefix frontend --silent run dev\"",
     "server": "node backend/server.js",
     "client": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",

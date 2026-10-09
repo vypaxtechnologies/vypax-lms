@@ -1,0 +1,12 @@
+[
+  {
+    "id": "admin-user",
+    "name": "Vypax Administrator",
+    "email": "admin@vypaxtechnologies.com",
+    "phone": "+91 0000000000",
+    "role": "ADMIN",
+    "passwordHash": "5b05b906c8d607622247a71e6922cc40817b61117b1a54fa7ed0b087bffb604f789b188ab8f86778d249ad17c2d190992e6b4a26d80a4dc56b91dcb0f3d1def2",
+    "salt": "6bf60980f1436484508f16a70cf31f40",
+    "createdAt": "2026-10-09T06:17:52.438Z"
+  }
+]
