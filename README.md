@@ -6,7 +6,7 @@ This project serves the Vypax Technologies website and its public pages. MongoDB
 - React + Vite for the website shell
 - Node.js + Express for serving the site, account authentication, and enquiry email delivery
 - MongoDB Atlas for persistent accounts and sessions
-- FormSubmit.io for public form submissions
+- Resend for enquiry and application email delivery
 
 ## Structure
 - `frontend/` — React shell and the preserved website UI/assets under `frontend/public/site/`
@@ -28,4 +28,4 @@ npm run build
 npm start
 ```
 
-Public enquiries are delivered using Resend and require `RESEND_API_KEY`, `EMAIL_FROM`, and `EMAIL_TO`. Career applications are also delivered using Resend with the applicant's résumé attached (PDF, DOC, or DOCX, up to 5 MB); they use `CAREER_EMAIL_TO` when set, or fall back to `EMAIL_TO`. For production, set `CLIENT_URL` to the public site origin and configure `MONGODB_URI` and `MONGODB_DATABASE` in the deployment environment.
+Public enquiries, hackathon partnership enquiries, and paid internship applications are delivered using Resend and require `RESEND_API_KEY`, `EMAIL_FROM`, and `EMAIL_TO`. Career applications are also delivered using Resend with the applicant's résumé attached (PDF, DOC, or DOCX, up to 5 MB); they use `CAREER_EMAIL_TO` when set, or fall back to `EMAIL_TO`. For production, set `CLIENT_URL` to the public site origin and configure `MONGODB_URI` and `MONGODB_DATABASE` in the deployment environment.
