@@ -41,11 +41,9 @@ document.querySelector("#enquiry-form")?.addEventListener("submit",async e=>{
   if(btn)btn.disabled=true;
   const formData=new FormData(form);
   try{
-    const res=await fetch("https://vypax-lms-backend.onrender.com/api/enquiries",{method:"POST",body:formData});
-    const text=await res.text();
-    let data;
-    try{data=JSON.parse(text);}catch{data={ok:false,error:text};}
-    if(res.ok && data.ok){
+    const {apiRequest}=await import("./api-client.js");
+    const data=await apiRequest("enquiries",{method:"POST",body:formData});
+    if(data.ok){
       status.textContent="Form submitted successfully.";
       const recipient=form.querySelector(".enquiry-recipient");
       if(recipient)recipient.textContent="Form submitted successfully.";

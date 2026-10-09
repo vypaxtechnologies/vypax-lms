@@ -50,17 +50,16 @@
         const batch = pendingQueries.filter(item => item.category === category);
         if (!batch.length) continue;
         const email = category === 'Hackathon' ? 'vypaxtechlogies@gmail.com' : 'vypaxtechlogies@gmail.com';
-        const response = await fetch('https://vypax-lms-backend.onrender.com/api/enquiries', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...visitor, category, message: batch.map(item => item.question + '\n' + item.answer).join('\n\n'), consent: true, chat: true }),
+        const { apiRequest } = await import('./api-client.js');
+        await apiRequest('enquiries', {
+          method: 'POST',
+          json: { ...visitor, category, message: batch.map(item => item.question + '\n' + item.answer).join('\n\n'), consent: true, chat: true },
           signal: AbortSignal.timeout(15000)
         });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Delivery failed');
         pendingQueries = pendingQueries.filter(item => !batch.includes(item));
       }
       deliveryMessage('Your enquiry was emailed to Vypax.');
-    } catch { deliveryMessage('We could not send your enquiry. Retry, or use Let’s Talk to contact Vypax.', true); }
+    } catch (error) { deliveryMessage(`We could not send your enquiry: ${error.message} Retry, or use Let’s Talk to contact Vypax.`, true); }
     finally { sending = false; }
   }
   function bubble(text, role) {

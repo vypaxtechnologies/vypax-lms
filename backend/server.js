@@ -77,6 +77,13 @@ app.post('/api/enquiries',async(req,res)=>{
 
 app.get('/api/health',(req,res)=>res.json({ok:true}));
 
+app.use('/api',(req,res)=>res.status(404).json({error:`API route not found: ${req.method} ${req.path}`}));
+app.use('/api',(error,req,res,next)=>{
+  if(res.headersSent)return next(error);
+  const status=Number.isInteger(error.status)?error.status:500;
+  return res.status(status).json({error:status<500?error.message:'API request failed.'});
+});
+
 const site=path.join(__dirname,'..','frontend','dist');
 const publicSite=path.join(__dirname,'..','frontend','public','site');
 app.use('/site',express.static(publicSite));
