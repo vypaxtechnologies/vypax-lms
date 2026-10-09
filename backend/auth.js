@@ -140,27 +140,31 @@ function parseCookies(header = '') {
   return cookies;
 }
 
-function issueSessionCookie(res, user) {
+function sessionCookieOptions(req) {
+  const secure = req.secure || process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    sameSite: secure ? 'none' : 'lax',
+    secure,
+    path: '/'
+  };
+}
+
+function issueSessionCookie(req, res, user) {
   const sessions = getSessions();
   const sessionId = crypto.randomBytes(24).toString('hex');
   const expiresAt = Date.now() + (7 * 24 * 60 * 60 * 1000);
   sessions.push({ id: sessionId, userId: user.id, expiresAt });
   writeSessions(sessions);
   res.cookie('vypax_session', sessionId, {
-    httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    ...sessionCookieOptions(req),
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
   return sessionId;
 }
 
-function clearSessionCookie(res) {
-  res.clearCookie('vypax_session', {
-    httpOnly: true,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    secure: process.env.NODE_ENV === 'production'
-  });
+function clearSessionCookie(req, res) {
+  res.clearCookie('vypax_session', sessionCookieOptions(req));
 }
 
 function getSessionUser(req) {
@@ -236,7 +240,7 @@ function registerUser(req, res) {
 
   users.push(user);
   writeUsers(users);
-  issueSessionCookie(res, user);
+  issueSessionCookie(req, res, user);
 
   return res.status(201).json({ user: sanitizeUser(user), message: 'Account created successfully.' });
 }
@@ -278,7 +282,7 @@ function authRouter() {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    issueSessionCookie(res, user);
+    issueSessionCookie(req, res, user);
     return res.json({ user: sanitizeUser(user), message: 'Signed in successfully.' });
   });
 
@@ -288,7 +292,7 @@ function authRouter() {
       const sessions = getSessions().filter((item) => item.id !== sessionId);
       writeSessions(sessions);
     }
-    clearSessionCookie(res);
+    clearSessionCookie(req, res);
     return res.json({ ok: true, message: 'Signed out.' });
   });
 
