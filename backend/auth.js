@@ -12,6 +12,13 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 const DEFAULT_ADMIN_EMAIL = 'admin@vypaxtechnologies.com';
 const DEFAULT_ADMIN_PASSWORD = 'Vypax@Admin2026!';
+
+function getConfiguredAdminCredentials() {
+  return {
+    email: normalizeEmail(process.env.ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL),
+    password: String(process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD)
+  };
+}
 const DEFAULT_JOBS = [
   { id: 'business-development-executive', name: 'Business Development Executive', description: 'Generate opportunities and grow learner and business relationships.', location: 'Bengaluru / Remote', status: 'Applications open', requirements: ['Strong communication', 'Sales focus', 'CRM comfort'] },
   { id: 'lead-generation-executive', name: 'Lead Generation Executive', description: 'Identify qualified leads and support funnel growth for student and corporate programmes.', location: 'Remote', status: 'Applications open', requirements: ['Research and outreach', 'Email and phone outreach', 'Good follow-up discipline'] },
@@ -23,10 +30,9 @@ function ensureStorage() {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
   const users = readJson(USERS_FILE, []);
-  const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL);
-  const adminPassword = process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+  const { email: adminEmail, password: adminPassword } = getConfiguredAdminCredentials();
 
-  if (!users.some((user) => user.email === adminEmail)) {
+  if (!users.some((user) => normalizeEmail(user.email) === adminEmail)) {
     const { salt, hash } = hashPassword(adminPassword);
     users.push({
       id: 'admin-user',
@@ -142,7 +148,7 @@ function issueSessionCookie(res, user) {
   writeSessions(sessions);
   res.cookie('vypax_session', sessionId, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     secure: process.env.NODE_ENV === 'production',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
@@ -152,7 +158,7 @@ function issueSessionCookie(res, user) {
 function clearSessionCookie(res) {
   res.clearCookie('vypax_session', {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     secure: process.env.NODE_ENV === 'production'
   });
 }
@@ -237,7 +243,29 @@ function authRouter() {
   router.post('/login', (req, res) => {
     const { email, password } = req.body || {};
     const cleanEmail = normalizeEmail(email);
-    const user = findUserByEmail(cleanEmail);
+    const { email: adminEmail, password: adminPassword } = getConfiguredAdminCredentials();
+    let user = findUserByEmail(cleanEmail);
+
+    if (cleanEmail === adminEmail && String(password || '') === adminPassword) {
+      user = user || getUsers().find((item) => normalizeEmail(item.email) === adminEmail) || null;
+      if (!user) {
+        const adminHash = hashPassword(adminPassword);
+        const adminUser = {
+          id: 'admin-user',
+          name: 'Vypax Administrator',
+          email: adminEmail,
+          phone: '+91 0000000000',
+          role: 'ADMIN',
+          passwordHash: adminHash.hash,
+          salt: adminHash.salt,
+          createdAt: new Date().toISOString()
+        };
+        const users = getUsers();
+        users.push(adminUser);
+        writeUsers(users);
+        user = adminUser;
+      }
+    }
 
     if (!user || !verifyPassword(String(password || ''), user)) {
       return res.status(401).json({ error: 'Invalid email or password.' });
