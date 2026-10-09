@@ -28,7 +28,4 @@ npm run build
 npm start
 ```
 
-The existing public enquiry forms use FormSubmit:
-`https://formsubmit.co/vypaxtechnologies@gmail.com`
-
-The enquiry email endpoint uses Resend and requires `RESEND_API_KEY`, `EMAIL_FROM`, and `EMAIL_TO`. For production, set `CLIENT_URL` to the public site origin and configure `MONGODB_URI` and `MONGODB_DATABASE` in the deployment environment.
+Public enquiries are delivered using Resend and require `RESEND_API_KEY`, `EMAIL_FROM`, and `EMAIL_TO`. Career applications are also delivered using Resend with the applicant's résumé attached (PDF, DOC, or DOCX, up to 5 MB); they use `CAREER_EMAIL_TO` when set, or fall back to `EMAIL_TO`. For production, set `CLIENT_URL` to the public site origin and configure `MONGODB_URI` and `MONGODB_DATABASE` in the deployment environment.
