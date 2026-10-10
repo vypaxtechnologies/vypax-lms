@@ -1,43 +1,38 @@
 {
-  "checkedOn": "2026-10-04",
+  "checkedOn": "2026-10-11",
   "source": "https://vypaxedutech.pages.dev/",
   "events": [
     {
       "slug": "hackathon-2026",
-      "name": "Hackathon November 2026",
+      "name": "Hackathon April 2027",
       "status": "Registration open",
       "fee": "₹99 per person",
       "team": "2–4 members",
       "theme": "App & Web Development",
-      "deadline": "10 November 2026",
+      "deadline": "31 March 2027",
       "venue": "Remote / Virtual",
       "prize": "Up to ₹1,00,000",
       "description": "A four-stage competition: register a team, develop your concept, submit a working project and compete for a place in the top-30 final.",
       "stages": [
         [
           "Registration",
-          "By 10 November 2026",
+          "By 31 March 2027",
           "Register your team before the deadline."
         ],
         [
           "Round 1 — Idea submission",
-          "12–13 November 2026",
+          "3-5 April 2027",
           "Submit your idea through the signed-in workspace."
         ],
         [
           "Round 2 — Video submission",
-          "18–20 November 2026",
+          "16-18 April 2027",
           "Selected participants submit their demo video."
         ],
         [
           "Final round",
-          "30 November 2026",
+          "1 May 2027",
           "Present your project in the virtual final."
-        ],
-        [
-          "Winner announcement",
-          "3 December 2026",
-          "Results are published in the workspace."
         ]
       ],
       "awards": [
@@ -113,7 +108,7 @@
     },
     {
       "slug": "hackathon-march-2027",
-      "name": "Hackathon March 2027",
+      "name": "Hackathon November 2027",
       "status": "Coming soon",
       "fee": "₹99 per person",
       "team": "2–4 members",
@@ -121,7 +116,7 @@
       "deadline": "To be announced",
       "venue": "Remote",
       "prize": "To be announced",
-      "description": "The next student and developer edition is being planned. Round dates, judging details and the prize structure are awaiting publication.",
+      "description": "The November 2027 student and developer edition is being planned. Round dates, judging details and the prize structure are awaiting publication.",
       "stages": [],
       "awards": [
         [

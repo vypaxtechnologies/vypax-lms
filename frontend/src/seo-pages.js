@@ -202,8 +202,8 @@ export const SEO_PAGES = [
   {
     file: 'hackathon-2026.html',
     path: '/hackathon-2026',
-    title: 'November 2026 Hackathon | Vypax Technologies',
-    description: 'Review the published November 2026 Vypax hackathon format, stages, team requirements and registration information.'
+    title: 'April 2027 Hackathon | Vypax Technologies',
+    description: 'Review the April 2027 Vypax hackathon format, stages, team requirements and registration information.'
   },
   {
     file: 'hackathon-for-professionals.html',
@@ -214,8 +214,8 @@ export const SEO_PAGES = [
   {
     file: 'hackathon-march-2027.html',
     path: '/hackathon-march-2027',
-    title: 'March 2027 Hackathon | Vypax Technologies',
-    description: 'Review current information about the planned March 2027 Vypax hackathon; schedule and prize details are pending.'
+    title: 'November 2027 Hackathon | Vypax Technologies',
+    description: 'Review current information about the planned November 2027 Vypax hackathon; schedule and prize details are pending.'
   }
 ];
 

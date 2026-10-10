@@ -66,9 +66,9 @@
 
                 if (id !== 'hackathon-2026') { if (data.schedule?.length) { root.append(el('h2', 'Event schedule')); for (const [title, date] of data.schedule) root.append(el('h3', title), el('p', date)); } else root.append(el('h2', 'Details coming soon'), el('p', 'Round dates will be published here.')); if (data.applicationUrl) root.append(safeLink('Apply Now', data.applicationUrl)); for (const key of ['meetUrl', 'zoomUrl']) if (data.configuration[key]) root.append(safeLink('Join live session', data.configuration[key])); return }
 
-                root.append(el('h2', 'November 2026 schedule')); const schedule = el('div', undefined, 'portal-schedule'); data.schedule.forEach(([title, date]) => { const card = el('article'); card.append(el('h3', title), el('p', date)); schedule.append(card) }); root.append(schedule, el('p', 'All dates use India Standard Time (IST).'));
+                root.append(el('h2', 'April 2027 schedule')); const schedule = el('div', undefined, 'portal-schedule'); data.schedule.forEach(([title, date]) => { const card = el('article'); card.append(el('h3', title), el('p', date)); schedule.append(card) }); root.append(schedule, el('p', 'All dates use India Standard Time (IST).'));
 
-                root.append(el('h2', 'Round submissions'), el('p', 'Round 1: upload your idea document or PPT on 12–13 November. Round 2: submit your LinkedIn video post link on 18–20 November, if selected.'));
+                root.append(el('h2', 'Round submissions'), el('p', 'Round 1: upload your idea document or PPT on 3-5 April 2027. Round 2: submit your LinkedIn video post link on 16-18 April 2027, if selected.'));
 
                 const roundSelect = el('select'); roundSelect.setAttribute('aria-label', 'Submission round'); for (const [value, text] of [['idea', 'Round 1 — Idea'], ['video', 'Round 2 — Video']]) { const option = el('option', text); option.value = value; roundSelect.append(option) } const roundLabel = el('label', 'Round'); roundLabel.append(roundSelect); const roundForm = el('div'); root.append(roundLabel, roundForm);
 

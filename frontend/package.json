@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/generate-seo.js",
+    "build": "vite build && vite build --config vite.learning-pdf.config.js && node scripts/generate-seo.js",
     "preview": "vite preview"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.4",
+    "jspdf": "^4.2.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.4"
