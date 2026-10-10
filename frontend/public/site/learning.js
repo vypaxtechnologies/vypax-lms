@@ -37,7 +37,7 @@
     });
     return items;
   };
-  const isLesson = location.pathname.endsWith('lesson.html');
+  const isLesson = location.pathname.endsWith('lesson.html') || location.pathname.endsWith('/lesson');
   const isAssessment = params.get('lesson') === 'assessment';
 
   root.replaceChildren(link('All Skills', 'skills.html', 'breadcrumb'));
