@@ -7,12 +7,14 @@
     "server": "node backend/server.js",
     "client": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
-    "start": "node backend/server.js"
+    "start": "node backend/server.js",
+    "test": "node --test backend/tests/*.test.cjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "mongodb": "^7.7.0",
     "multer": "^2.4.0",
     "nodemon": "^3.1.14",
     "resend": "^6.32.1"
