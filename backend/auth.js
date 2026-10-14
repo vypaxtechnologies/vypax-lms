@@ -389,8 +389,8 @@ async function registerUser(req, res) {
     return res.status(400).json({ error: 'Please provide a valid email address.' });
   }
 
-  if (!password || String(password).length < 12 || String(password).length > 128) {
-    return res.status(400).json({ error: 'Password must be at least 12 characters long.' });
+  if (!password || String(password).length < 8 || String(password).length > 128) {
+    return res.status(400).json({ error: 'Password must be between 8 and 128 characters long.' });
   }
 
   if (![true, 'on', 'Agreed'].includes(consent)) {
@@ -484,7 +484,7 @@ function authRouter() {
     const resetToken = String(token || '').trim();
     const nextPassword = String(password || '');
 
-    if (!resetToken || nextPassword.length < 12) {
+    if (!resetToken || nextPassword.length < 8 || nextPassword.length > 128) {
       return res.status(400).json({ error: 'A valid reset token and new password are required.' });
     }
 
