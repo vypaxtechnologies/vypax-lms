@@ -1,5 +1,5 @@
 const VYPAX_ENQUIRY_ROUTES={"Hackathon":[{"label":"Vypax Hackathons","path":"hackathons.html"}],"Service":[{"label":"Staffing & Solutions","path":"index.html#services"},{"label":"Website Development","path":"index.html#services"},{"label":"App Development","path":"index.html#services"},{"label":"AI Automation","path":"index.html#services"},{"label":"SEO","path":"index.html#services"},{"label":"Digital Marketing","path":"index.html#services"},{"label":"Lead Generation","path":"index.html#services"},{"label":"Google Business Profile Optimization","path":"index.html#services"}],"Internship":[{"label":"Data Analytics Internship","path":"internship-application.html?domain=Data%20Analytics"},{"label":"AI/ML Internship","path":"internship-application.html?domain=AI%2FML"},{"label":"Web Development Internship","path":"internship-application.html?domain=Web%20Development"},{"label":"Business Analytics Internship","path":"internship-application.html?domain=Business%20Analytics"},{"label":"Digital Marketing Internship","path":"internship-application.html?domain=Digital%20Marketing"},{"label":"UI/UX Internship","path":"internship-application.html?domain=UI%2FUX"},{"label":"Cybersecurity Internship","path":"internship-application.html?domain=Cybersecurity"}],"Training":[{"label":"Full Stack Development","path":"program-full-stack-development.html"},{"label":"Frontend Development","path":"program-frontend-development.html"},{"label":"Backend Development","path":"program-backend-development.html"},{"label":"Data Analyst","path":"program-data-analyst.html"},{"label":"Data Science","path":"program-data-science.html"},{"label":"Generative AI","path":"program-generative-ai.html"},{"label":"Human Resource","path":"program-human-resource.html"},{"label":"Business Analyst","path":"program-business-analyst.html"},{"label":"Artificial Intelligence","path":"program-artificial-intelligence.html"},{"label":"Machine Learning","path":"program-machine-learning.html"}],"Programs":[{"label":"Training Catalogue","path":"programs.html"},{"label":"Skill Guides","path":"skills.html"},{"label":"Find Your Path","path":"career-path.html"}]};
-VYPAX_ENQUIRY_ROUTES.Internship=window.VYPAX_INTERNSHIP_CATALOG.map(item=>({label:item.name,path:'internship-application.html?domain='+encodeURIComponent(item.id)}));
+if(Array.isArray(window.VYPAX_INTERNSHIP_CATALOG))VYPAX_ENQUIRY_ROUTES.Internship=window.VYPAX_INTERNSHIP_CATALOG.map(item=>({label:item.name,path:'internship-application.html?domain='+encodeURIComponent(item.id)}));
 (()=>{
 if(!/\/(?:index\.html)?$/.test(location.pathname))return;
 const dialog=document.createElement("dialog");dialog.className="enquiry-popup";dialog.setAttribute("aria-labelledby","popup-title");
@@ -11,7 +11,18 @@ function updateRoute(){const route=destination();browse.disabled=!route;next.val
 category.addEventListener("change",()=>{interest.replaceChildren(new Option("Choose your interest",""));const rows=VYPAX_ENQUIRY_ROUTES[category.value]||[];interest.disabled=!rows.length;rows.forEach(r=>interest.add(new Option(r.label,r.label)));updateRoute()});interest.addEventListener("change",updateRoute);
 dialog.querySelector(".popup-close").onclick=()=>dialog.close();dialog.addEventListener("click",e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close()}});
 browse.onclick=()=>{const route=destination();if(route)location.href=route.path};
-dialog.querySelector("form").addEventListener("submit",e=>{if(location.protocol==="file:"){e.preventDefault();status.textContent="Extract the ZIP and open Launch Website.cmd before submitting.";return}updateRoute();if(!destination()){e.preventDefault();return}status.textContent="Saving your enquiry before continuing to your selected page.";});
+dialog.querySelector("form").addEventListener("submit",async e=>{
+  e.preventDefault(); updateRoute();
+  const form=e.currentTarget, route=destination();
+  if(!route||!form.reportValidity())return;
+  const button=form.querySelector('button[type=submit]');button.disabled=true;status.textContent='Sending enquiry…';
+  try{
+    const {apiRequest}=await import('./api-client.js');
+    const result=await apiRequest('enquiries',{method:'POST',json:Object.fromEntries(new FormData(form))});
+    if(!result.ok)throw new Error('Your enquiry could not be accepted.');
+    status.textContent='Your enquiry was accepted. Continuing…';location.href=route.path;
+  }catch(error){status.textContent=error.message;button.disabled=false;}
+});
 let shown=false;try{shown=sessionStorage.getItem("vypax-enquiry-shown")==="yes"}catch{}
 function checkHomepageEnd(){if(shown||window.scrollY<=0)return;const page=document.documentElement;if(window.scrollY+window.innerHeight<page.scrollHeight-24)return;if(document.querySelector("dialog[open]")||document.querySelector("#assistant-panel:not([hidden])"))return;dialog.showModal();shown=true;try{sessionStorage.setItem("vypax-enquiry-shown","yes")}catch{}window.removeEventListener("scroll",checkHomepageEnd)}
 if(!shown)window.addEventListener("scroll",checkHomepageEnd,{passive:true});

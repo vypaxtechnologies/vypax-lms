@@ -1,9 +1,21 @@
 (()=>{
 const root=document.querySelector("#quiz-library"),skills=window.VYPAX_QUIZ_SKILLS;let skill=-1,quiz=-1,query="";
+if(!root||!Array.isArray(skills))return;
+async function openSkill(index){
+  const selected=skills[index];
+  root.setAttribute('aria-busy','true');
+  root.replaceChildren(el('p','Loading quizzes…'));
+  try{
+    if(window.VYPAX_LOAD_QUIZZES)await window.VYPAX_LOAD_QUIZZES(selected);
+    skill=index;quiz=-1;render();
+  }catch(error){
+    root.replaceChildren(el('p',error.message||'Quizzes could not be loaded.'),button('Retry',()=>openSkill(index)),button('All Skills',()=>{skill=-1;render()}));
+  }finally{root.removeAttribute('aria-busy')}
+}
 function el(tag,text){const n=document.createElement(tag);if(text)n.textContent=text;return n}
 function button(text,action){const b=el("button",text);b.className="button outline";b.type="button";b.onclick=action;return b}
 function render(){root.replaceChildren();root.className="quiz-library-layout";
-if(skill<0){const label=el("label","Search skill quizzes"),search=el("input");search.type="search";search.value=query;search.placeholder="Search a skill";label.append(search);root.append(label);const grid=el("div");grid.className="cards three";root.append(grid);function cards(){grid.replaceChildren();skills.forEach((s,i)=>{if(!s.name.toLowerCase().includes(query.toLowerCase()))return;const card=el("article");card.append(el("h3",s.name),el("p","20 quizzes · 3 questions per quiz"),button("Explore Quizzes",()=>{skill=i;quiz=-1;render()}));grid.append(card)});if(!grid.children.length)grid.append(el("p","No matching skills. Try another search."))}search.oninput=()=>{query=search.value;cards()};cards();return}
+if(skill<0){const label=el("label","Search skill quizzes"),search=el("input");search.type="search";search.value=query;search.placeholder="Search a skill";label.append(search);root.append(label);const grid=el("div");grid.className="cards three";root.append(grid);function cards(){grid.replaceChildren();skills.forEach((s,i)=>{if(!s.name.toLowerCase().includes(query.toLowerCase()))return;const card=el("article");card.append(el("h3",s.name),el("p","20 quizzes · 3 questions per quiz"),button("Explore Quizzes",()=>openSkill(i)));grid.append(card)});if(!grid.children.length)grid.append(el("p","No matching skills. Try another search."))}search.oninput=()=>{query=search.value;cards()};cards();return}
 const s=skills[skill];root.append(button("All Skills",()=>{skill=-1;quiz=-1;render()}),el("h3",s.name+" Quizzes"));
 if(quiz<0){const grid=el("div");grid.className="cards three";s.quizzes.forEach((q,i)=>{const card=el("article");card.append(el("h3","Quiz "+(i+1)),el("p","3 questions · Foundation practice"),button("Start Quiz",()=>{quiz=i;render();root.scrollIntoView({block:"start",behavior:"auto"})}));grid.append(card)});root.append(grid);return}
 root.append(button("All "+s.name+" Quizzes",()=>{quiz=-1;render()}),el("p","Quiz "+(quiz+1)+" of 20 · 3 questions"));const questions=s.quizzes[quiz],form=el("form");

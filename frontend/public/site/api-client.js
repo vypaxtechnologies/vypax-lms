@@ -1,4 +1,5 @@
-export const API_BASE_URL = 'https://vypax-lms-backend.onrender.com/api';
+export const API_BASE_URL = ['localhost', '127.0.0.1'].includes(location.hostname)
+  ? '/api' : 'https://vypax-lms-backend.onrender.com/api';
 
 export class ApiError extends Error {
   constructor(message, { status, contentType, isJson } = {}) {

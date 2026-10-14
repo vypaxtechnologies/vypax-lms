@@ -34,7 +34,14 @@
 
                 if (data.status === 'PENDING') { panel.append(el('h2', 'Payment awaiting verification'), el('p', 'This page checks for approval automatically. Your workspace opens as soon as Vypax verifies payment. Do not pay again while verification is pending.')); }
 
-                if (data.qr && data.upiUrl) { const image = el('img'); image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(data.qr); image.alt = 'Scan to pay ' + data.recipient + ' \u20b9' + data.fee + ' using UPI'; image.width = 256; image.height = 256; if (data.qrImage) { const crop = el('div', undefined, 'payment-scanner-image'); image.src = data.qrImage; image.removeAttribute('width'); image.removeAttribute('height'); image.alt = 'Scan the supplied payment QR for ' + data.recipient; crop.append(image); panel.append(crop, el('p', 'Enter the exact amount of ₹' + data.fee + ' when scanning this QR.')); } else panel.append(image, el('p', 'This QR includes your selected fee of \u20b9' + data.fee + ' and your application reference.')); panel.append(el('p', 'Payee: ' + data.recipient), el('p', 'UPI ID: ' + data.upi), a('Pay using UPI app', data.upiUrl, 'button'), el('p', 'Check the recipient and amount in your UPI app before paying.')); } else panel.append(el('p', 'UPI payment details are awaiting confirmation from Vypax. Contact the Vypax team through the enquiry form before making any payment.'));
+                if (data.upiUrl) {
+                    if (data.qrImage || data.qr) {
+                        const image = el('img'); image.src = data.qrImage || 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(data.qr); image.alt = 'Scan to pay ' + data.recipient;
+                        if (data.qrImage) { const crop = el('div', undefined, 'payment-scanner-image'); crop.append(image); panel.append(crop); }
+                        else { image.width = 256; image.height = 256; panel.append(image); }
+                    }
+                    panel.append(el('p', 'Enter the exact amount of ₹' + data.fee + ' when paying.'), el('p', 'Payee: ' + data.recipient), el('p', 'UPI ID: ' + data.upi), a('Pay using UPI app', data.upiUrl, 'button'), el('p', 'Check the recipient and amount in your UPI app before paying.'));
+                } else panel.append(el('p', 'Payment details are awaiting confirmation. Contact Vypax before paying.'));
 
                 if (data.status === 'PENDING') { const check = el('button', 'Verify Payment', 'button outline'), message = el('p'); message.setAttribute('role', 'status'); check.onclick = async () => { check.disabled = true; message.textContent = 'Checking payment approval…'; try { const latest = await api('payments/panel?id=' + encodeURIComponent(paymentId)); if (latest.status === 'VERIFIED') { location.replace(latest.target); return } message.textContent = latest.status === 'PENDING' ? 'Your payment is still awaiting review by Vypax.' : latest.feedback || 'Payment status: ' + latest.status; if (latest.status !== data.status) await showPayment(); } catch (error) { message.textContent = error.message } finally { check.disabled = false } }; panel.append(check, message); return; }
 
@@ -126,7 +133,7 @@
 
         }
 
-        if (data.hackathonEnrollments?.length) { root.append(el('h2', 'Your hackathons')); for (const enrollment of data.hackathonEnrollments) { const card = el('article', undefined, 'portal-internship'); card.append(el('h3', enrollment.data.event.replaceAll('-', ' ')), el('p', 'Payment: ' + enrollment.data.status), a(enrollment.data.status === 'VERIFIED' ? 'Open hackathon workspace' : 'Scan QR / Pay with UPI', enrollment.data.status === 'VERIFIED' ? 'portal.html?type=hackathons&id=' + encodeURIComponent(enrollment.data.event) : 'portal.html?payment=' + encodeURIComponent(enrollment.id))); root.append(card) } }
+        if (data.hackathonEnrollments?.length) { root.append(el('h2', 'Your hackathons')); for (const enrollment of data.hackathonEnrollments) { const card = el('article', undefined, 'portal-internship'); card.append(el('h3', enrollment.event.replaceAll('-', ' ')), el('p', 'Payment: ' + enrollment.status), a(enrollment.status === 'VERIFIED' ? 'Open hackathon workspace' : 'Scan QR / Pay with UPI', enrollment.status === 'VERIFIED' ? 'portal.html?type=hackathons&id=' + encodeURIComponent(enrollment.event) : 'portal.html?payment=' + encodeURIComponent(enrollment.id))); root.append(card) } }
 
         if (params.get('internship')) document.getElementById('internship-' + params.get('internship'))?.scrollIntoView({ block: 'start' });
 

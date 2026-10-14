@@ -1,6 +1,15 @@
-(() => {
+(async () => {
   const root = document.querySelector('#learning-root');
   if (!root) return;
+  if (window.VYPAX_LEARNING_READY) {
+    root.setAttribute('aria-busy', 'true');
+    try { await window.VYPAX_LEARNING_READY; }
+    catch (error) {
+      root.textContent = error.message || 'Lessons could not be loaded. Please reload this page.';
+      root.setAttribute('role', 'alert');
+      return;
+    } finally { root.removeAttribute('aria-busy'); }
+  }
 
   const params = new URLSearchParams(location.search);
   const skills = Array.isArray(window.VYPAX_LEARNING) ? window.VYPAX_LEARNING : [];

@@ -50,6 +50,12 @@
         </div>
         <p id="empty-learners" hidden>No learner accounts have been registered yet.</p>
       </section>
+      <section aria-labelledby="payments-heading">
+        <h2 id="payments-heading">Payment verification</h2>
+        <p>Check the transaction against your payment account before approving. Approval opens learner access.</p>
+        <button id="refresh-payments" class="button outline" type="button">Refresh payments</button>
+        <div id="payment-list" aria-live="polite"></div>
+      </section>
     </div>
   </main>
   <script src="admin.js?v=20261009-auth-api" defer></script>

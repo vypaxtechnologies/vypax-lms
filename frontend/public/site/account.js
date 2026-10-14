@@ -2,7 +2,7 @@
     const { apiRequest } = await import('./api-client.js');
     const root = document.querySelector('#portal-root'), params = new URLSearchParams(location.search);
     const mode = ['login', 'signup', 'forgot', 'reset'].includes(params.get('mode')) ? params.get('mode') : 'login';
-    const next = params.get('next'); const target = next && /^(admin|portal|skill|lesson)\.html(?:\?|$)/.test(next) ? next : 'portal.html';
+    const next = params.get('next'); const target = next && /^(admin|portal|skill|lesson|internship-application)\.html(?:\?|$)/.test(next) ? next : 'portal.html';
     root.innerHTML = '<div class="account-box"><p class="eyebrow">VYPAX ACCOUNT</p><h1></h1><p class="account-intro"></p><form id="account-form"></form><p id="account-status" role="status"></p><div class="actions" id="account-links"></div></div>';
     const title = { login: 'Welcome back', signup: 'Create your account', forgot: 'Reset your password', reset: 'Choose a new password' };
     root.querySelector('h1').textContent = title[mode]; root.querySelector('.account-intro').textContent = 'Access course details, hackathon submissions, learning progress and your internship workspace.';

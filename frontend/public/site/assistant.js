@@ -6,7 +6,9 @@
   const messages = document.querySelector('#assistant-messages');
   const input = document.querySelector('#assistant-input');
   const form = document.querySelector('#assistant-form');
+  panel.querySelector('.assistant-notice').textContent = 'FAQ assistant: choose a prepared answer. For IT services and consulting, contact our team.';
   const questions = [
+    ['What IT services and consulting do you offer?', 'Vypax Technologies helps businesses with website and app development, AI automation, SEO, digital marketing, lead generation and staffing solutions. Use Let’s Talk to discuss your project requirements.'],
     ['What training programs are available?', programs.map(p => `${p[1]} — ${p[2]} months`).join('\n') + '\nExplore Programs for the curriculum and application details.'],
     ['What hackathons are available?', 'April 2027: remote App & Web Development, teams of 2–4, ₹99 per person. Registration closes 31 March 2027. Idea submission: 3–5 April; video submission: 16–18 April; final round: 1 May 2027. Prize pool up to ₹1,00,000.\n\nPrahar: Open to students and professionals competing together. Registration: ₹0 — Free, teams of 1–2. Awards: 1st–3rd receive a trophy and certificate; 4th–5th receive a medal and certificate. Every participant receives a certificate of participation. Round details are coming soon; final: coming soon.\n\nNovember 2027: ₹99 per person; schedule and awards to be announced. Open the event page for updates.'],
     ['How do I apply for a program?', 'Open Programs, choose a course, and select Apply for This Program. Send your interest to discuss fees, batch availability and enrolment requirements. An enquiry does not confirm admission or payment.'],
@@ -46,7 +48,7 @@
     sending = true;
     deliveryMessage('Sending your enquiry…');
     try {
-      for (const category of ['Training', 'Hackathon']) {
+      for (const category of ['Service', 'Training', 'Hackathon']) {
         const batch = pendingQueries.filter(item => item.category === category);
         if (!batch.length) continue;
         const email = category === 'Hackathon' ? 'vypaxtechlogies@gmail.com' : 'vypaxtechlogies@gmail.com';
@@ -81,7 +83,7 @@
   function answer(index) {
     const entry = questions[index];
     if (!entry || !visitor) return;
-    if (!pendingQueries.some(item => item.question === entry[0])) pendingQueries.push({ question: entry[0], answer: entry[1], category: /hackathon|prahar/i.test(entry[0]) ? 'Hackathon' : 'Training' });
+    if (!pendingQueries.some(item => item.question === entry[0])) pendingQueries.push({ question: entry[0], answer: entry[1], category: /IT services|consulting/i.test(entry[0]) ? 'Service' : /hackathon|prahar/i.test(entry[0]) ? 'Hackathon' : 'Training' });
     bubble(entry[0], 'user'); bubble(entry[1], 'assistant'); input.value = String(index);
     const hackathon = /hackathon|prahar/i.test(entry[0]);
     document.querySelector('#assistant-enquiry').href = hackathon ? 'hackathons.html#hackathon-enquiry' : 'contact.html?type=Training#enquiry';
