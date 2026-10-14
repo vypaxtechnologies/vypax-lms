@@ -4,20 +4,20 @@ export const SEO_PAGES = [
   {
     file: 'index.html',
     path: '/',
-    title: 'Vypax Technologies | Training, Internships & Technology Services',
-    description: 'Explore Vypax career training, practical internships, hackathons and technology services for learners and businesses.'
+    title: 'Vypax Technologies | IT Services & Consulting',
+    description: 'Vypax Technologies provides IT services and consulting, website and app development, AI automation, digital marketing and staffing solutions for businesses.'
   },
   {
     file: 'about.html',
     path: '/about',
-    title: 'About Vypax Technologies | EdTech & IT Services',
-    description: 'Learn about Vypax Technologies, its career training, project practice and technology services for learners and businesses.'
+    title: 'About Vypax Technologies | IT Services & Consulting',
+    description: 'Learn about Vypax Technologies and its IT services, consulting, software development and business technology solutions.'
   },
   {
     file: 'services.html',
     path: '/services',
-    title: 'Technology Services for Businesses | Vypax Technologies',
-    description: 'Explore Vypax website and app development, AI automation, SEO, digital marketing, lead generation and staffing services.'
+    title: 'IT Services & Consulting for Businesses | Vypax Technologies',
+    description: 'Explore Vypax IT consulting, website and app development, AI automation, SEO, digital marketing, lead generation and staffing services.'
   },
   {
     file: 'contact.html',

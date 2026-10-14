@@ -74,17 +74,20 @@ function App(){
     const w=frame.current?.contentWindow,d=frame.current?.contentDocument;
     if(!w||!d)return;
     const sync=()=>{
-      const path=w.location.pathname.replace('/site','')||'/';
+      const rawPath=w.location.pathname.replace(/^\/site(?=\/|$)/,'')||'/';
+      const page=pageFromPath(rawPath);
+      const path=page?pagesByFile.get(page).path:rawPath;
       const target=path+(w.location.search||'')+(w.location.hash||'');
       const current=location.pathname+location.search+location.hash;
       if(target!==current)history.pushState({},'',target);
     };
     d.addEventListener('click',e=>{
       const a=e.target.closest?.('a');
+      if(e.defaultPrevented||e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey||(a?.target&&a.target!=='_self'))return;
       if(a&&a.href&&new URL(a.href).origin===location.origin){
         const u=new URL(a.href);
         if(u.pathname.startsWith('/site/')){
-          const page=pageFromPath(u.pathname);
+          const page=pageFromPath(u.pathname.replace(/^\/site\//,'/'));
           if(!page)return;
           e.preventDefault();
           history.pushState({},'',pagesByFile.get(page).path+u.search+u.hash);
@@ -93,6 +96,9 @@ function App(){
       }
     });
     w.addEventListener('popstate',sync);
+    sync();
+    const loadedPage=pageFromPath(w.location.pathname.replace(/^\/site\//,'/'));
+    if(loadedPage)updatePageMetadata(loadedPage);
   };
   if(!src)return <main className="not-found"><h1>Page not found</h1><p>The page you requested does not exist.</p><a href="/">Return to Vypax Technologies</a></main>;
   return <iframe ref={frame} className="site-frame" src={src} onLoad={onLoad} title="Vypax Technologies"/>;
