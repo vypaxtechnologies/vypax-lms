@@ -15,7 +15,8 @@
   const button = form.querySelector('button[type=submit]');
   let signedInUser = null;
   function signIn() {
-    const next = 'internship-application.html?' + new URLSearchParams({ domain:domainSelect.value, months:months.value });
+    const selectedDomain=requestedDomain&&![...domainSelect.options].some(option=>option.value===requestedDomain)?requestedDomain:domainSelect.value;
+    const next = 'internship-application.html?' + new URLSearchParams({ domain:selectedDomain, months:months.value });
     location.href = 'account.html?next=' + encodeURIComponent(next);
   }
   form.addEventListener('submit', async event => {

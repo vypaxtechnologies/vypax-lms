@@ -87,9 +87,11 @@
 
             } else if (type === 'internships') {
 
-                root.append(el('h2', 'Choose your internship duration'), el('p', '1 month \u20b9499 Â· 2 months \u20b9999 Â· 3 months \u20b91,299 Â· 6 months \u20b91,999. Projects and notes unlock after payment is verified. These are applicant fees, not a salary.'));
+                const internshipFees=data.fees||{1:499,2:999,3:1299,6:1999};
+                const durationOptions=[1,2,3,6].map(months=>[String(months),months+' months — ₹'+internshipFees[months]]);
+                root.append(el('h2','Choose your internship duration'),el('p','Projects and notes unlock after payment verification. These are applicant fees, not a salary.'));
 
-                root.append(form([{ name: 'months', label: 'Duration', options: [['1', '1 month â€” \u20b9499'], ['2', '2 months â€” \u20b9999'], ['3', '3 months â€” \u20b91,299'], ['6', '6 months â€” \u20b91,999']] }], 'Create internship application', async values => { const application = await api('portal/internship', { domain: id, months: Number(values.months) }); location.href = 'portal.html?payment=' + encodeURIComponent(application.id) })); root.append(a('View my internship workspace', 'portal.html')); const months = params.get('months'); if (['1', '2', '3', '6'].includes(months)) { root.querySelector('select[name=months]').value = months; }
+                root.append(form([{ name: 'months', label: 'Duration', options: durationOptions }], 'Create internship application', async values => { const application = await api('portal/internship', { domain: id, months: Number(values.months) }); location.href = 'portal.html?payment=' + encodeURIComponent(application.id) })); root.append(a('View my internship workspace', 'portal.html')); const months = params.get('months'); if (['1', '2', '3', '6'].includes(months)) { root.querySelector('select[name=months]').value = months; }
 
             }
 

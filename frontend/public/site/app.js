@@ -157,3 +157,5 @@ showError("Event details are temporarily unavailable. Please check the official 
 });
 }
 renderHackathonDetails();
+
+import('./public-catalogue.js').catch(() => {});

@@ -1,5 +1,5 @@
-export const API_BASE_URL = ['localhost', '127.0.0.1'].includes(location.hostname)
-  ? '/api' : 'https://vypax-lms-backend.onrender.com/api';
+// Serve the Express API under the website's /api route. No external hosting provider is hard-coded.
+export const API_BASE_URL = '/api';
 
 export class ApiError extends Error {
   constructor(message, { status, contentType, isJson } = {}) {
