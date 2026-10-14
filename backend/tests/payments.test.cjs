@@ -29,7 +29,9 @@ test('internship payments require sign-in, ownership, valid receipts and admin a
     return { status:response.status, data:await response.json(), cookie:response.headers.get('set-cookie')?.split(';')[0] };
   }
   assert.equal((await request('portal/internship',{domain:'internship-web-development',months:1})).status,401);
-  const account={name:'Test Learner',email:'learner@example.test',phone:'9876543210',password:crypto.randomBytes(20).toString('hex'),consent:true};
+  const account={name:'Test Learner',email:'learner@example.test',phone:'9876543210',password:crypto.randomBytes(4).toString('hex'),consent:true};
+  assert.equal((await request('auth/register',{...account,password:'1234567'})).status,400);
+  assert.equal((await request('auth/register',{...account,password:'a'.repeat(129)})).status,400);
   assert.equal((await request('auth/register',{...account,email:'invalid'})).status,400);
   const learner=await request('auth/register',account); assert.equal(learner.status,201);
   const cookie=learner.cookie;
