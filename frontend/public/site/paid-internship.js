@@ -13,12 +13,14 @@
   if (['1','2','3','6'].includes(params.get('months'))) months.value = params.get('months');
   const status = form.querySelector('[role=status]');
   const button = form.querySelector('button[type=submit]');
+  let signedInUser = null;
   function signIn() {
     const next = 'internship-application.html?' + new URLSearchParams({ domain:domainSelect.value, months:months.value });
     location.href = 'account.html?next=' + encodeURIComponent(next);
   }
   form.addEventListener('submit', async event => {
     event.preventDefault(); event.stopImmediatePropagation();
+    if (!signedInUser) { signIn(); return; }
     if (!form.reportValidity()) return;
     button.disabled = true; status.textContent = 'Saving your internship application…';
     try {
@@ -29,9 +31,19 @@
       status.textContent = error.message; button.disabled = false;
     }
   }, true);
+  // A visitor can open login even before account lookup finishes or when the API is unavailable.
+  button.addEventListener('click', event => {
+    if (signedInUser) return;
+    event.preventDefault();
+    signIn();
+  });
   try {
     const { user } = await apiRequest('auth/me');
     if (!user) { signIn(); return; }
+    signedInUser = user;
     for (const name of ['name','email','phone']) { form.elements[name].value = user[name] || ''; form.elements[name].readOnly = true; }
-  } catch (error) { status.textContent = error.message; }
+  } catch (error) {
+    if (error.status === 401) { signIn(); return; }
+    status.textContent = 'Continue to login or signup to apply. ' + error.message;
+  }
 })();
