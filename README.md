@@ -43,6 +43,14 @@ Production requires `MONGODB_URI`. Set `ADMIN_EMAIL` and a strong `ADMIN_PASSWOR
 
 Run `npm test` to verify sign-in requirements, application fees, receipt ownership, administrator approval/rejection and access control. Database connection and live deployment require separate validation against the configured Atlas account.
 
+## Administrator content management
+
+The configured administrator email is `vypaxtechnologies@gmail.com`. Keep `ADMIN_PASSWORD` in private backend environment settings; never commit it. On startup, the configured email receives administrator privileges when an admin password is present. An existing matching learner account retains its ID and learning/payment records. New administrators use a unique account ID.
+
+The dashboard at `/admin` manages training programs, internship fees and learning notes, and job opportunities. Listings can be created, edited, saved as drafts, published or unpublished. Records are preserved; unpublishing stops new applications without deleting existing enrolments. MongoDB stores listings and checks versions to prevent stale edits from overwriting newer changes. Public pages read published listings through `/api/catalogue`; private notes and administrator identifiers are excluded. Enquiries and job applications still require the configured email-delivery service.
+
+The frontend now uses the website's `/api` route for its Express backend. Cloudflare Pages alone does not provide this API; configure a working backend route and MongoDB before publishing this branch. Render is no longer hard-coded in the frontend.
+
 ## Search Console and deployment
 
 Keep the public name **Vypax Technologies**, with IT services and consulting as the main homepage focus. Build output includes crawlable page content, canonical/social metadata, Organization and WebSite structured data, `robots.txt` and `sitemap.xml`. An optional `GOOGLE_SITE_VERIFICATION` build variable adds the HTML verification tag.
