@@ -4,7 +4,9 @@ const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const { MongoClient } = require('mongodb');
+let database, mongoClient;
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const RESET_TOKENS_FILE = path.join(DATA_DIR, 'reset-tokens.json');
@@ -16,7 +18,7 @@ const HACKATHON_DATA_FILE = path.join(PUBLIC_SITE_DIR, 'hackathons-data.json');
 const INTERNSHIP_ASSESSMENTS_FILE = path.join(PUBLIC_SITE_DIR, 'internship-assessments.json');
 
 const DEFAULT_ADMIN_EMAIL = 'admin@vypaxtechnologies.com';
-const DEFAULT_ADMIN_PASSWORD = 'Vypax@Admin2026!';
+const DEFAULT_ADMIN_PASSWORD = '';
 
 function getConfiguredAdminCredentials() {
   return {
@@ -30,14 +32,14 @@ const DEFAULT_JOBS = [
   { id: 'hr-intern', name: 'HR Intern', description: 'Support recruitment coordination, onboarding, and learner engagement workflows.', location: 'Bengaluru', status: 'Internship', requirements: ['Organised and patient', 'Professional communication', 'Documentation skills'] }
 ];
 
-function ensureStorage() {
+async function ensureStorage() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-  const users = readJson(USERS_FILE, []);
+  const users = await getUsers();
   const { email: adminEmail, password: adminPassword } = getConfiguredAdminCredentials();
 
-  if (!users.some((user) => normalizeEmail(user.email) === adminEmail)) {
+  if (adminPassword && !users.some((user) => normalizeEmail(user.email) === adminEmail)) {
     const { salt, hash } = hashPassword(adminPassword);
     users.push({
       id: 'admin-user',
@@ -49,15 +51,16 @@ function ensureStorage() {
       salt,
       createdAt: new Date().toISOString()
     });
-    writeJson(USERS_FILE, users);
+    await writeUsers(users);
   }
 
-  if (!fs.existsSync(SESSIONS_FILE)) writeJson(SESSIONS_FILE, []);
-  if (!fs.existsSync(RESET_TOKENS_FILE)) writeJson(RESET_TOKENS_FILE, {});
-  if (!fs.existsSync(PORTAL_DATA_FILE)) writeJson(PORTAL_DATA_FILE, {});
 }
 
-function readJson(filePath, fallback) {
+async function readJson(filePath, fallback) {
+  if (database) {
+    const document = await database.collection("lms_storage").findOne({ _id: path.basename(filePath) });
+    return document ? document.value : fallback;
+  }
   try {
     const raw = fs.readFileSync(filePath, 'utf8');
     if (!raw.trim()) return fallback;
@@ -67,7 +70,11 @@ function readJson(filePath, fallback) {
   }
 }
 
-function writeJson(filePath, data) {
+async function writeJson(filePath, data) {
+  if (database) {
+    await database.collection("lms_storage").replaceOne({ _id: path.basename(filePath) }, { value: data }, { upsert: true });
+    return;
+  }
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
@@ -86,44 +93,46 @@ function verifyPassword(password, user) {
   return user.passwordHash === hash;
 }
 
-function getUsers() {
-  ensureStorage();
-  return readJson(USERS_FILE, []);
+async function getUsers() {
+  if (database) return database.collection('users').find({}, { projection:{ _id:0 } }).toArray();
+  return (await readJson(USERS_FILE, []));
 }
 
-function writeUsers(users) {
-  writeJson(USERS_FILE, users);
+async function writeUsers(users) {
+  if (database) {
+    await database.collection('users').bulkWrite(users.map(user => ({ updateOne:{ filter:{id:user.id}, update:{$setOnInsert:user}, upsert:true } })));
+    return;
+  }
+  (await writeJson(USERS_FILE, users));
 }
 
-function getSessions() {
-  ensureStorage();
-  return readJson(SESSIONS_FILE, []);
+async function getSessions() {
+  return (await readJson(SESSIONS_FILE, []));
 }
 
-function writeSessions(sessions) {
-  writeJson(SESSIONS_FILE, sessions);
+async function writeSessions(sessions) {
+  (await writeJson(SESSIONS_FILE, sessions));
 }
 
-function getResetTokens() {
-  ensureStorage();
-  return readJson(RESET_TOKENS_FILE, {});
+async function getResetTokens() {
+  return (await readJson(RESET_TOKENS_FILE, {}));
 }
 
-function writeResetTokens(tokens) {
-  writeJson(RESET_TOKENS_FILE, tokens);
+async function writeResetTokens(tokens) {
+  (await writeJson(RESET_TOKENS_FILE, tokens));
 }
 
 function readRequiredJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-function getPortalStore() {
-  return readJson(PORTAL_DATA_FILE, {});
+async function getPortalStore() {
+  return (await readJson(PORTAL_DATA_FILE, {}));
 }
 
-function getPortalState(userId) {
-  const store = getPortalStore();
-  const savedState = store[userId] || {};
+async function getPortalState(userId) {
+  const store = database ? null : (await getPortalStore());
+  const savedState = database ? (await database.collection('portal_states').findOne({ _id:userId }))?.state || {} : store[userId] || {};
   return {
     skillProgress: { skills: {} },
     internships: [],
@@ -135,8 +144,22 @@ function getPortalState(userId) {
   };
 }
 
-function updatePortalState(userId, update) {
-  const store = getPortalStore();
+async function updatePortalState(userId, update) {
+  if (database) {
+    for (let attempt=0; attempt<5; attempt++) {
+      const saved = await database.collection('portal_states').findOne({ _id:userId });
+      const state = { skillProgress:{skills:{}}, internships:[], submissions:[], hackathonSubmissions:[], hackathonEnrollments:[], trainingApplications:[], ...saved?.state };
+      update(state);
+      if (!saved) {
+        try { await database.collection('portal_states').insertOne({ _id:userId, version:1, state }); return state; }
+        catch (error) { if (error.code === 11000) continue; throw error; }
+      }
+      const result = await database.collection('portal_states').updateOne({ _id:userId, version:saved.version }, { $set:{state}, $inc:{version:1} });
+      if (result.modifiedCount) return state;
+    }
+    const error = new Error('Your records changed. Please retry.'); error.status=409; throw error;
+  }
+  const store = (await getPortalStore());
   const state = {
     skillProgress: { skills: {} },
     internships: [],
@@ -148,7 +171,7 @@ function updatePortalState(userId, update) {
   };
   update(state);
   store[userId] = state;
-  writeJson(PORTAL_DATA_FILE, store);
+  (await writeJson(PORTAL_DATA_FILE, store));
   return state;
 }
 
@@ -160,15 +183,15 @@ function createApplicationId(prefix) {
   return `${prefix}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
 }
 
-function getPaymentApplication(userId, paymentId) {
-  const state = getPortalState(userId);
+async function getPaymentApplication(userId, paymentId) {
+  const state = (await getPortalState(userId));
   return state.internships.find((item) => item.id === paymentId)
     || state.hackathonEnrollments.find((item) => item.id === paymentId)
     || state.trainingApplications?.find((item) => item.id === paymentId)
     || null;
 }
 
-function addTrainingOrEventApplication(userId, type, itemId) {
+async function addTrainingOrEventApplication(userId, type, itemId) {
   const content = getPortalContent();
   const item = content[type]?.[itemId];
   if (!item) return null;
@@ -189,11 +212,11 @@ function addTrainingOrEventApplication(userId, type, itemId) {
     createdAt
   };
 
-  updatePortalState(userId, (state) => {
+  (await updatePortalState(userId, (state) => {
     const key = type === 'hackathons' ? 'hackathonEnrollments' : 'trainingApplications';
     state[key] ||= [];
     state[key].push(application);
-  });
+  }));
 
   return application;
 }
@@ -210,10 +233,10 @@ function getAssessmentQuestions(domain, month) {
   return assessments[domain]?.[String(month)] || null;
 }
 
-function getInternshipAssessment(req, res, submit) {
+async function getInternshipAssessment(req, res, submit) {
   const id = String((submit ? req.body?.id : req.query.id) || '').trim();
   const month = Number(submit ? req.body?.month : req.query.month);
-  const state = getPortalState(req.user.id);
+  const state = (await getPortalState(req.user.id));
   const internship = state.internships.find((item) => item.id === id);
   if (!internship) return res.status(404).json({ error: 'Internship application not found.' });
   if (internship.status !== 'VERIFIED') {
@@ -248,7 +271,7 @@ function getInternshipAssessment(req, res, submit) {
 
   const score = questions.reduce((total, question, index) => total + (answers[index] === question.correct ? 1 : 0), 0);
   const attempt = { score, passed: score >= Math.ceil(questions.length * 0.7), submittedAt: new Date().toISOString() };
-  updatePortalState(req.user.id, (userState) => {
+  (await updatePortalState(req.user.id, (userState) => {
     const record = userState.internships.find((item) => item.id === id);
     record.assessments ||= [];
     let assessment = record.assessments.find((item) => item.month === month);
@@ -257,7 +280,7 @@ function getInternshipAssessment(req, res, submit) {
       record.assessments.push(assessment);
     }
     assessment.attempts.push(attempt);
-  });
+  }));
   return res.json(attempt);
 }
 
@@ -273,13 +296,15 @@ function sanitizeUser(user) {
   };
 }
 
-function findUserByEmail(email) {
+async function findUserByEmail(email) {
   const target = normalizeEmail(email);
-  return getUsers().find((user) => normalizeEmail(user.email) === target) || null;
+  if (database) return database.collection('users').findOne({email:target});
+  return (await getUsers()).find((user) => normalizeEmail(user.email) === target) || null;
 }
 
-function findUserById(userId) {
-  return getUsers().find((user) => user.id === userId) || null;
+async function findUserById(userId) {
+  if (database) return database.collection('users').findOne({id:userId});
+  return (await getUsers()).find((user) => user.id === userId) || null;
 }
 
 function parseCookies(header = '') {
@@ -289,7 +314,7 @@ function parseCookies(header = '') {
     if (index === -1) continue;
     const key = pair.slice(0, index).trim();
     const value = pair.slice(index + 1).trim();
-    if (key) cookies[key] = decodeURIComponent(value);
+    if (key) { try { cookies[key] = decodeURIComponent(value); } catch { /* Ignore malformed cookies. */ } }
   }
   return cookies;
 }
@@ -304,12 +329,12 @@ function sessionCookieOptions(req) {
   };
 }
 
-function issueSessionCookie(req, res, user) {
-  const sessions = getSessions();
+async function issueSessionCookie(req, res, user) {
   const sessionId = crypto.randomBytes(24).toString('hex');
   const expiresAt = Date.now() + (7 * 24 * 60 * 60 * 1000);
-  sessions.push({ id: sessionId, userId: user.id, expiresAt });
-  writeSessions(sessions);
+  const session = { id:sessionId, userId:user.id, expiresAt };
+  if (database) await database.collection('sessions').insertOne(session);
+  else { const sessions=await getSessions(); sessions.push(session); await writeSessions(sessions); }
   res.cookie('vypax_session', sessionId, {
     ...sessionCookieOptions(req),
     maxAge: 7 * 24 * 60 * 60 * 1000
@@ -321,25 +346,22 @@ function clearSessionCookie(req, res) {
   res.clearCookie('vypax_session', sessionCookieOptions(req));
 }
 
-function getSessionUser(req) {
+async function getSessionUser(req) {
   const sessionId = parseCookies(req.headers.cookie || '').vypax_session;
   if (!sessionId) return null;
 
-  const sessions = getSessions();
-  const session = sessions.find((item) => item.id === sessionId);
+  const session = database ? await database.collection('sessions').findOne({ id:sessionId }) : (await getSessions()).find((item) => item.id === sessionId);
   if (!session) return null;
   if (session.expiresAt < Date.now()) {
-    const remaining = sessions.filter((item) => item.id !== sessionId);
-    writeSessions(remaining);
     return null;
   }
 
-  const user = findUserById(session.userId);
+  const user = (await findUserById(session.userId));
   return user || null;
 }
 
-function authRequired(req, res, next) {
-  const user = getSessionUser(req);
+async function authRequired(req, res, next) {
+  const user = (await getSessionUser(req));
   if (!user) {
     return res.status(401).json({ error: 'Please sign in.' });
   }
@@ -354,32 +376,33 @@ function adminRequired(req, res, next) {
   next();
 }
 
-function registerUser(req, res) {
+async function registerUser(req, res) {
   const { name, email, phone, password, consent } = req.body || {};
   const cleanName = String(name || '').trim();
   const cleanEmail = normalizeEmail(email);
 
-  if (!cleanName || cleanName.length < 2) {
+  if (!cleanName || cleanName.length < 2 || cleanName.length > 100) {
     return res.status(400).json({ error: 'Please provide a valid full name.' });
   }
 
-  if (!cleanEmail || !cleanEmail.includes('@')) {
+  if (cleanEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
     return res.status(400).json({ error: 'Please provide a valid email address.' });
   }
 
-  if (!password || String(password).length < 12) {
+  if (!password || String(password).length < 12 || String(password).length > 128) {
     return res.status(400).json({ error: 'Password must be at least 12 characters long.' });
   }
 
-  if (consent === false || consent === 'false') {
+  if (![true, 'on', 'Agreed'].includes(consent)) {
     return res.status(400).json({ error: 'You must agree to the account consent statement.' });
   }
+  if (!/^[+0-9 ()-]{7,20}$/.test(String(phone || '').trim())) return res.status(400).json({error:'Please provide a valid mobile number.'});
 
-  if (findUserByEmail(cleanEmail)) {
+  if ((await findUserByEmail(cleanEmail))) {
     return res.status(409).json({ error: 'An account with this email already exists.' });
   }
 
-  const users = getUsers();
+  const users = (await getUsers());
   const { salt, hash } = hashPassword(String(password));
   const user = {
     id: `user_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`,
@@ -393,8 +416,11 @@ function registerUser(req, res) {
   };
 
   users.push(user);
-  writeUsers(users);
-  issueSessionCookie(req, res, user);
+  if (database) {
+    try { await database.collection('users').insertOne(user); }
+    catch (error) { if (error.code === 11000) return res.status(409).json({error:'An account with this email already exists.'}); throw error; }
+  } else (await writeUsers(users));
+  (await issueSessionCookie(req, res, user));
 
   return res.status(201).json({ user: sanitizeUser(user), message: 'Account created successfully.' });
 }
@@ -405,68 +431,46 @@ function authRouter() {
   router.post('/register', registerUser);
   router.post('/signup', registerUser);
 
-  router.post('/login', (req, res) => {
+  router.post('/login', async (req, res) => {
     const { email, password } = req.body || {};
     const cleanEmail = normalizeEmail(email);
-    const { email: adminEmail, password: adminPassword } = getConfiguredAdminCredentials();
-    let user = findUserByEmail(cleanEmail);
-
-    if (cleanEmail === adminEmail && String(password || '') === adminPassword) {
-      user = user || getUsers().find((item) => normalizeEmail(item.email) === adminEmail) || null;
-      if (!user) {
-        const adminHash = hashPassword(adminPassword);
-        const adminUser = {
-          id: 'admin-user',
-          name: 'Vypax Administrator',
-          email: adminEmail,
-          phone: '+91 0000000000',
-          role: 'ADMIN',
-          passwordHash: adminHash.hash,
-          salt: adminHash.salt,
-          createdAt: new Date().toISOString()
-        };
-        const users = getUsers();
-        users.push(adminUser);
-        writeUsers(users);
-        user = adminUser;
-      }
-    }
+    let user = (await findUserByEmail(cleanEmail));
 
     if (!user || !verifyPassword(String(password || ''), user)) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    issueSessionCookie(req, res, user);
+    (await issueSessionCookie(req, res, user));
     return res.json({ user: sanitizeUser(user), message: 'Signed in successfully.' });
   });
 
-  router.post('/logout', (req, res) => {
+  router.post('/logout', async (req, res) => {
     const sessionId = parseCookies(req.headers.cookie || '').vypax_session;
     if (sessionId) {
-      const sessions = getSessions().filter((item) => item.id !== sessionId);
-      writeSessions(sessions);
+      if (database) await database.collection('sessions').deleteOne({id:sessionId});
+      else { const sessions = (await getSessions()).filter((item) => item.id !== sessionId); await writeSessions(sessions); }
     }
     clearSessionCookie(req, res);
     return res.json({ ok: true, message: 'Signed out.' });
   });
 
-  router.get('/me', (req, res) => {
-    const user = getSessionUser(req);
+  router.get('/me', async (req, res) => {
+    const user = (await getSessionUser(req));
     if (!user) return res.json({ user: null });
     return res.json({ user: sanitizeUser(user) });
   });
 
-  router.post('/forgot', (req, res) => {
+  router.post('/forgot', async (req, res) => {
     const email = normalizeEmail(req.body?.email);
     const token = crypto.randomBytes(24).toString('hex');
-    const resets = getResetTokens();
+    const resets = (await getResetTokens());
 
     if (email) {
       resets[token] = {
         email,
         createdAt: Date.now()
       };
-      writeResetTokens(resets);
+      (await writeResetTokens(resets));
     }
 
     return res.json({
@@ -475,7 +479,7 @@ function authRouter() {
     });
   });
 
-  router.post('/reset', (req, res) => {
+  router.post('/reset', async (req, res) => {
     const { token, password } = req.body || {};
     const resetToken = String(token || '').trim();
     const nextPassword = String(password || '');
@@ -484,18 +488,18 @@ function authRouter() {
       return res.status(400).json({ error: 'A valid reset token and new password are required.' });
     }
 
-    const resets = getResetTokens();
+    const resets = (await getResetTokens());
     const resetEntry = resets[resetToken];
-    if (!resetEntry) {
+    if (!resetEntry || Date.now() - resetEntry.createdAt > 60 * 60 * 1000) {
       return res.status(400).json({ error: 'This reset link is invalid or expired.' });
     }
 
-    const user = findUserByEmail(resetEntry.email);
+    const user = (await findUserByEmail(resetEntry.email));
     if (!user) {
       return res.status(400).json({ error: 'This user no longer exists.' });
     }
 
-    const users = getUsers();
+    const users = (await getUsers());
     const index = users.findIndex((item) => item.id === user.id);
     const { salt, hash } = hashPassword(nextPassword);
     users[index] = {
@@ -503,9 +507,10 @@ function authRouter() {
       salt,
       passwordHash: hash
     };
-    writeUsers(users);
+    if (database) await database.collection('users').updateOne({id:user.id}, {$set:{salt,passwordHash:hash}});
+    else (await writeUsers(users));
     delete resets[resetToken];
-    writeResetTokens(resets);
+    (await writeResetTokens(resets));
 
     return res.json({ ok: true, message: 'Password updated successfully. Please sign in.' });
   });
@@ -519,47 +524,60 @@ function paymentRouter() {
 
   router.use(authRequired);
 
-  router.get('/panel', (req, res) => {
+  router.get('/panel', async (req, res) => {
     const paymentId = String(req.query.id || '').trim();
     if (!paymentId) return res.status(400).json({ error: 'Payment application id is required.' });
-    const application = getPaymentApplication(req.user.id, paymentId);
+    const application = (await getPaymentApplication(req.user.id, paymentId));
     if (!application) return res.status(404).json({ error: 'Payment application not found.' });
+    const upi = process.env.PAYMENT_UPI_ID || 'harshsaini05012004@okaxis';
+    const recipient = process.env.PAYMENT_RECIPIENT || 'Harsh Saini';
+    const upiUrl = upi ? 'upi://pay?' + new URLSearchParams({ pa: upi, pn: recipient, am: String(application.fee), cu: 'INR', tn: paymentId }) : null;
     return res.json({
       id: paymentId,
       status: application.status,
       title: application.name || 'Learning access payment',
       fee: application.fee,
-      feedback: application.feedback || 'Payment is awaiting review. Access will be updated after verification.',
+      feedback: application.feedback || (application.status === 'PENDING' ? 'Payment is awaiting admin verification.' : 'Submit your payment proof after paying.'),
+      upi, recipient, upiUrl,
+      qrImage: upi === 'harshsaini05012004@okaxis' ? '/site/internship-payment-qr.jpg' : null,
       target: 'portal.html'
     });
   });
 
-  router.post('/event-apply', (req, res) => {
+  router.post('/event-apply', async (req, res) => {
     const eventId = String(req.body?.event || '').trim();
     if (!eventId) return res.status(400).json({ error: 'Hackathon event id is required.' });
-    const application = addTrainingOrEventApplication(req.user.id, 'hackathons', eventId);
+    const application = (await addTrainingOrEventApplication(req.user.id, 'hackathons', eventId));
     if (!application) return res.status(404).json({ error: 'Hackathon event not found.' });
     if (application.unavailable) return res.status(409).json({ error: 'A confirmed event fee is not available yet.' });
     return res.status(201).json({ id: application.id, message: 'Hackathon application created.' });
   });
 
-  router.post('/training-apply', (req, res) => {
+  router.post('/training-apply', async (req, res) => {
     const courseId = String(req.body?.course || '').trim();
     if (!courseId) return res.status(400).json({ error: 'Course id is required.' });
-    const application = addTrainingOrEventApplication(req.user.id, 'courses', courseId);
+    const application = (await addTrainingOrEventApplication(req.user.id, 'courses', courseId));
     if (!application) return res.status(404).json({ error: 'Course not found.' });
     if (application.unavailable) return res.status(409).json({ error: 'A confirmed course fee is not available yet.' });
     return res.status(201).json({ id: application.id, message: 'Training application created.' });
   });
 
-  router.post('/proof', (req, res) => {
+  router.post('/proof', async (req, res) => {
     const { id, reference, receiptUploadId } = req.body || {};
     const paymentId = String(id || '').trim();
     const transactionReference = String(reference || '').trim();
     if (!paymentId) return res.status(400).json({ error: 'Payment record id is required.' });
     if (!transactionReference) return res.status(400).json({ error: 'Transaction reference is required.' });
-    const application = getPaymentApplication(req.user.id, paymentId);
+    const application = (await getPaymentApplication(req.user.id, paymentId));
     if (!application) return res.status(404).json({ error: 'Payment application not found.' });
+
+    if (!['AWAITING_PAYMENT', 'REJECTED'].includes(application.status)) return res.status(409).json({ error: 'Payment is already pending review or verified.' });
+    if (transactionReference.length > 100) return res.status(400).json({ error: 'Transaction reference must be at most 100 characters.' });
+    if (receiptUploadId) {
+      if (!/^upload_\d+_[a-f0-9]{12}$/.test(receiptUploadId)) return res.status(400).json({ error: 'Invalid receipt.' });
+      const metadata = await readJson(path.join(UPLOAD_DIR, receiptUploadId + '.json'), null);
+      if (!metadata || metadata.userId !== req.user.id || metadata.paymentId !== paymentId) return res.status(400).json({ error: 'Receipt does not belong to this payment.' });
+    }
 
     application.paymentProof = {
       reference: transactionReference,
@@ -567,20 +585,38 @@ function paymentRouter() {
       submittedAt: new Date().toISOString()
     };
     application.status = 'PENDING';
-    updatePortalState(req.user.id, (state) => {
+    (await updatePortalState(req.user.id, (state) => {
       for (const collection of [state.internships, state.hackathonEnrollments, state.trainingApplications || []]) {
         const record = collection.find((item) => item.id === paymentId);
-        if (record) Object.assign(record, application);
+        if (record) {
+          if (!['AWAITING_PAYMENT','REJECTED'].includes(record.status)) { const error = new Error('Payment is already pending or verified.'); error.status=409; throw error; }
+          Object.assign(record, application);
+        }
       }
-    });
+    }));
     return res.json({ ok: true, message: 'Payment proof was submitted and is awaiting review.', receiptUploadId: receiptUploadId || null });
   });
 
-  router.post('/receipt-upload', uploadMiddleware.single('file'), (req, res) => {
+  router.post('/receipt-upload', uploadMiddleware.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file was uploaded.' });
+    const paymentId = String(req.query.id || '');
+    const application = await getPaymentApplication(req.user.id, paymentId);
+    const bytes = fs.readFileSync(req.file.path);
+    const mime = bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'image/png'
+      : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg'
+      : bytes.subarray(0,4).toString() === 'RIFF' && bytes.subarray(8,12).toString() === 'WEBP' ? 'image/webp'
+      : bytes.subarray(0,5).toString() === '%PDF-' ? 'application/pdf' : null;
+    if (!application || !['AWAITING_PAYMENT', 'REJECTED'].includes(application.status) || !mime) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Choose a valid payment and a PNG, JPG, WEBP or PDF receipt.' });
+    }
     const uploadId = `upload_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const uploadPath = path.join(UPLOAD_DIR, `${uploadId}.bin`);
-    fs.renameSync(req.file.path, uploadPath);
+    if (database) {
+      await database.collection('receipts').insertOne({ _id: uploadId, userId: req.user.id, paymentId, mime, bytes });
+      fs.unlinkSync(req.file.path);
+    } else fs.renameSync(req.file.path, uploadPath);
+    await writeJson(path.join(UPLOAD_DIR, uploadId + '.json'), { userId: req.user.id, paymentId, mime });
     return res.json({ ok: true, uploadId, message: 'Receipt uploaded successfully.' });
   });
 
@@ -593,14 +629,15 @@ function portalRouter() {
 
   router.use(authRequired);
 
-  router.get('/dashboard', (req, res) => {
-    const state = getPortalState(req.user.id);
+  router.get('/dashboard', async (req, res) => {
+    const state = (await getPortalState(req.user.id));
     return res.json({
       skillProgress: state.skillProgress?.skills ? state.skillProgress : { skills: {} },
       internships: (state.internships || []).map((internship) => {
         const savedAssessments = internship.assessments || [];
         return {
           ...internship,
+          ...(internship.status !== 'VERIFIED' ? { projects:[], notes:[], resources:[], materials:[] } : {}),
           assessments: Array.from({ length: internship.months }, (_, index) => {
             const month = index + 1;
             const opensAt = assessmentOpensAt(internship, month);
@@ -620,7 +657,7 @@ function portalRouter() {
     });
   });
 
-  router.get('/content', (req, res) => {
+  router.get('/content', async (req, res) => {
     const type = String(req.query.type || '').trim();
     const id = String(req.query.id || '').trim();
     if (!['courses', 'hackathons', 'internships'].includes(type) || !id) {
@@ -630,6 +667,11 @@ function portalRouter() {
     const content = getPortalContent()[type]?.[id];
     if (!content) return res.status(404).json({ error: 'Portal content not found.' });
     const result = { ...content, configuration: content.configuration || {} };
+    if (type === 'internships') {
+      const verified = (await getPortalState(req.user.id)).internships.some(item => item.domain === id && item.status === 'VERIFIED');
+      result.locked = !verified;
+      if (!verified) { result.projects=[]; result.notes=[]; result.resources=[]; result.materials=[]; }
+    }
     if (type === 'hackathons') {
       const publishedEvent = readRequiredJson(HACKATHON_DATA_FILE).events
         .find((event) => event.slug === id);
@@ -640,33 +682,33 @@ function portalRouter() {
         result.team = publishedEvent.team || result.team;
         result.description = publishedEvent.description || result.description;
       }
-      const enrollment = getPortalState(req.user.id).hackathonEnrollments
+      const enrollment = (await getPortalState(req.user.id)).hackathonEnrollments
         .find((item) => item.event === id && item.status === 'VERIFIED');
       result.locked = !enrollment;
     }
     return res.json(result);
   });
 
-  router.get('/jobs', (req, res) => {
+  router.get('/jobs', async (req, res) => {
     return res.json({ jobs: DEFAULT_JOBS });
   });
 
-  router.get('/results', (req, res) => {
+  router.get('/results', async (req, res) => {
     return res.json({ round1: [], round2: [], winners: [] });
   });
 
-  router.get('/payment-instructions', (req, res) => {
+  router.get('/payment-instructions', async (req, res) => {
     return res.json({
       instructions: process.env.PAYMENT_INSTRUCTIONS
         || 'Payment instructions have not been published. Contact Vypax to confirm an approved payment method before paying.'
     });
   });
 
-  router.get('/payment-options', (req, res) => {
+  router.get('/payment-options', async (req, res) => {
     return res.json({ online: false });
   });
 
-  router.post('/internship', (req, res) => {
+  router.post('/internship', async (req, res) => {
     const domain = String(req.body?.domain || '').trim();
     const months = Number(req.body?.months);
     if (![1, 2, 3, 6].includes(months)) {
@@ -675,10 +717,13 @@ function portalRouter() {
 
     const content = getPortalContent().internships?.[domain];
     if (!content) return res.status(404).json({ error: 'Internship domain not found.' });
+    const existing = (await getPortalState(req.user.id)).internships.find(item => item.domain === domain && item.months === months && ['AWAITING_PAYMENT','PENDING','REJECTED'].includes(item.status));
+    if (existing) return res.json({id:existing.id,message:'Continue with your saved internship application.'});
     const feeByMonths = { 1: 499, 2: 999, 3: 1299, 6: 1999 };
     const application = {
       id: createApplicationId('internship'),
       domain,
+      name: content.name || domain.replace(/^internship-/, '').replaceAll('-', ' '),
       months,
       fee: feeByMonths[months],
       status: 'AWAITING_PAYMENT',
@@ -690,27 +735,27 @@ function portalRouter() {
       assessments: [],
       createdAt: new Date().toISOString()
     };
-    updatePortalState(req.user.id, (state) => {
+    (await updatePortalState(req.user.id, (state) => {
       state.internships ||= [];
       state.internships.push(application);
-    });
+    }));
     return res.status(201).json({ id: application.id, message: 'Internship application created.' });
   });
 
-  router.post('/checkout', (req, res) => {
+  router.post('/checkout', async (req, res) => {
     return res.status(503).json({ error: 'Online checkout is not configured. Use the published payment instructions.' });
   });
 
-  router.post('/payment-confirm', (req, res) => {
+  router.post('/payment-confirm', async (req, res) => {
     return res.status(503).json({ error: 'Online payment verification is not configured.' });
   });
 
-  router.post('/project', (req, res) => {
+  router.post('/project', async (req, res) => {
     const id = String(req.body?.id || '').trim();
     const month = Number(req.body?.month);
     const url = String(req.body?.url || '').trim();
     const description = String(req.body?.description || '').trim();
-    const state = getPortalState(req.user.id);
+    const state = (await getPortalState(req.user.id));
     const internship = state.internships.find((item) => item.id === id);
     if (!internship) return res.status(404).json({ error: 'Internship application not found.' });
     if (internship.status !== 'VERIFIED') return res.status(403).json({ error: 'Project submissions are available after payment verification.' });
@@ -736,24 +781,24 @@ function portalRouter() {
       description,
       created_at: new Date().toISOString()
     };
-    updatePortalState(req.user.id, (userState) => {
+    (await updatePortalState(req.user.id, (userState) => {
       userState.submissions ||= [];
       userState.submissions.push({ data: submission, created_at: submission.created_at });
-    });
+    }));
     return res.status(201).json({ message: 'Project submission saved.' });
   });
 
-  router.get('/internship-assessment', (req, res) => {
-    return getInternshipAssessment(req, res, false);
+  router.get('/internship-assessment', async (req, res) => {
+    return (await getInternshipAssessment(req, res, false));
   });
 
-  router.post('/internship-assessment', (req, res) => {
-    return getInternshipAssessment(req, res, true);
+  router.post('/internship-assessment', async (req, res) => {
+    return (await getInternshipAssessment(req, res, true));
   });
 
-  router.get('/certificate', (req, res) => {
+  router.get('/certificate', async (req, res) => {
     const id = String(req.query.id || '').trim();
-    const internship = getPortalState(req.user.id).internships
+    const internship = (await getPortalState(req.user.id)).internships
       .find((item) => item.status === 'VERIFIED' && item.certificate?.id === id);
     if (!internship) return res.status(404).json({ error: 'Verified internship certificate not found.' });
     const escapeXml = (value) => String(value).replace(/[&<>]/g, (character) => ({
@@ -776,7 +821,7 @@ function portalRouter() {
     return res.send(svg);
   });
 
-  router.post('/hackathon-upload', uploadMiddleware.single('file'), (req, res) => {
+  router.post('/hackathon-upload', uploadMiddleware.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file was uploaded.' });
     const uploadId = `hackathon_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
     const uploadPath = path.join(UPLOAD_DIR, `${uploadId}.bin`);
@@ -784,7 +829,7 @@ function portalRouter() {
     return res.json({ ok: true, uploadId, message: 'File uploaded.' });
   });
 
-  router.post('/hackathon', (req, res) => {
+  router.post('/hackathon', async (req, res) => {
     const { title, description, url, uploadId, event, round } = req.body || {};
     if (!title || !description) {
       return res.status(400).json({ error: 'Project title and description are required.' });
@@ -793,7 +838,7 @@ function portalRouter() {
     if (!getPortalContent().hackathons?.[eventId]) {
       return res.status(404).json({ error: 'Hackathon event not found.' });
     }
-    const enrollment = getPortalState(req.user.id).hackathonEnrollments
+    const enrollment = (await getPortalState(req.user.id)).hackathonEnrollments
       .find((item) => item.event === eventId && item.status === 'VERIFIED');
     if (!enrollment) return res.status(403).json({ error: 'A verified event enrollment is required before submitting.' });
     const submittedUploadId = String(uploadId || '').trim();
@@ -812,10 +857,10 @@ function portalRouter() {
       round: String(round || '').trim(),
       created_at: new Date().toISOString()
     };
-    updatePortalState(req.user.id, (state) => {
+    (await updatePortalState(req.user.id, (state) => {
       state.hackathonSubmissions ||= [];
       state.hackathonSubmissions.push({ data: submission, created_at: submission.created_at });
-    });
+    }));
     return res.status(201).json({ ok: true, message: `Hackathon submission saved for ${eventId} (${submission.round || 'round'}).` });
   });
 
@@ -826,8 +871,57 @@ function adminRouter() {
   const router = express.Router();
   router.use(authRequired, adminRequired);
 
-  router.get('/overview', (req, res) => {
-    const users = getUsers()
+  router.get('/payments', async (req, res) => {
+    const payments = [];
+    for (const user of await getUsers()) {
+      const state = await getPortalState(user.id);
+      for (const application of [...state.internships, ...state.hackathonEnrollments, ...state.trainingApplications]) {
+        payments.push({ ...application, userId: user.id, learner: { name: user.name, email: user.email } });
+      }
+    }
+    return res.json({ payments });
+  });
+
+  router.get('/receipts/:id', async (req, res) => {
+    const id = req.params.id;
+    if (!/^upload_\d+_[a-f0-9]{12}$/.test(id)) return res.status(404).json({ error: 'Receipt not found.' });
+    const metadata = await readJson(path.join(UPLOAD_DIR, id + '.json'), null);
+    if (!metadata) return res.status(404).json({ error: 'Receipt not found.' });
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Disposition', 'attachment; filename="receipt.' + ({ 'image/png':'png', 'image/jpeg':'jpg', 'image/webp':'webp', 'application/pdf':'pdf' })[metadata.mime] + '"');
+    res.type(metadata.mime);
+    if (database) {
+      const receipt = await database.collection('receipts').findOne({ _id: id });
+      if (!receipt) return res.status(404).json({ error: 'Receipt not found.' });
+      return res.send(Buffer.from(receipt.bytes.buffer));
+    }
+    return res.sendFile(path.resolve(UPLOAD_DIR, id + '.bin'));
+  });
+
+  router.post('/payments/review', async (req, res) => {
+    const { userId, id, decision } = req.body || {};
+    const feedback = String(req.body?.feedback || '').trim();
+    if (typeof userId !== 'string' || typeof id !== 'string' || !userId || !id) return res.status(400).json({error:'Learner and payment IDs are required.'});
+    if (!['VERIFIED', 'REJECTED'].includes(decision) || feedback.length > 1000 || (decision === 'REJECTED' && !feedback)) return res.status(400).json({ error: 'Choose approve or reject and give a reason for rejection.' });
+    const application = await getPaymentApplication(userId, id);
+    if (!application) return res.status(404).json({ error: 'Payment not found.' });
+    if (application.status !== 'PENDING' || !application.paymentProof?.reference) return res.status(409).json({ error: 'Only submitted payments awaiting review can be reviewed.' });
+    await updatePortalState(userId, state => {
+      const record = [...state.internships, ...state.hackathonEnrollments, ...state.trainingApplications].find(item => item.id === id);
+      if (record.status !== 'PENDING') { const error = new Error('This payment was already reviewed.'); error.status=409; throw error; }
+      record.status = decision;
+      record.feedback = feedback;
+      record.reviewedBy = req.user.id;
+      record.reviewedAt = new Date().toISOString();
+      if (decision === 'VERIFIED') { record.verifiedAt = record.reviewedAt; record.startedAt = record.reviewedAt; }
+      record.reviewHistory ||= [];
+      record.reviewHistory.push({ decision, feedback, by: req.user.id, at: record.reviewedAt });
+    });
+    return res.json({ ok: true, message: decision === 'VERIFIED' ? 'Payment approved. Learner access is unlocked.' : 'Payment rejected. The learner can resubmit proof.' });
+  });
+
+  router.get('/overview', async (req, res) => {
+    const users = (await getUsers())
       .filter((user) => user.role !== 'ADMIN')
       .map((user) => ({
         name: user.name,
@@ -851,8 +945,20 @@ module.exports = {
   portalRouter,
   adminRouter,
   paymentRouter,
-  connectDatabase: async () => true,
-  getDatabase: () => null
+  connectDatabase: async () => {
+    if (process.env.MONGODB_URI) {
+      mongoClient = new MongoClient(process.env.MONGODB_URI);
+      await mongoClient.connect();
+      database = mongoClient.db(process.env.MONGODB_DATABASE || 'vypax_lms');
+      await database.command({ ping: 1 });
+      await database.collection('users').createIndex({email:1}, {unique:true});
+      await database.collection('users').createIndex({id:1}, {unique:true});
+      await database.collection('sessions').createIndex({id:1}, {unique:true});
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error('MONGODB_URI is required in production.');
+    }
+    await ensureStorage();
+    return Boolean(database);
+  },
+  getDatabase: () => database
 };
-
-ensureStorage();

@@ -22,6 +22,8 @@ const allowedOrigins=new Set([
   'http://localhost:4173',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:4173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
   'https://vypax.pages.dev'
 ].filter(Boolean));
 
@@ -36,6 +38,19 @@ app.use(cors({
 }));
 app.use(express.json({limit:'2mb'}));
 app.use(express.urlencoded({extended:true,limit:'2mb'}));
+
+// Existing storage performs read-modify-write operations. Serialize local mutations
+// so two requests cannot overwrite account, session or payment updates.
+let mutationQueue = Promise.resolve();
+app.use('/api', (req, res, next) => {
+  if (['GET','HEAD','OPTIONS'].includes(req.method)) return next();
+  const previous = mutationQueue;
+  let release;
+  mutationQueue = new Promise(resolve => { release = resolve; });
+  res.once('finish', release);
+  res.once('close', release);
+  previous.then(next, next);
+});
 
 app.use('/api/auth',authRouter());
 app.use('/api/portal',portalRouter());
@@ -261,23 +276,31 @@ app.post('/api/enquiries',upload.none(),async(req,res)=>{
 
   const body=req.body||{};
   const {name,email,phone,enquiry_type,interest,background,message,consent,category}=body;
+  const isChat=body.chat===true;
+  if(![true,'Agreed','on'].includes(consent))return res.status(400).json({error:'Please confirm consent before submitting.'});
+  if(String(body._honey||'').trim())return res.status(400).json({error:'Enquiry could not be accepted.'});
+  if(!isChat && (String(name||'').trim().length<2 || String(name).length>120))return res.status(400).json({error:'Please provide your full name (2–120 characters).'});
+  if(!isChat && !validEmail(String(email||'').trim()))return res.status(400).json({error:'Please provide a valid email address.'});
+  if((!isChat || phone) && !validPhone(String(phone||'').trim()))return res.status(400).json({error:'Please provide a valid mobile number.'});
+  if(String(message||'').length>20000)return res.status(400).json({error:'Your message is too long.'});
   try{
     const {error}=await resend.emails.send({
       from:process.env.EMAIL_FROM,
       to:process.env.EMAIL_TO,
+      ...(email?{replyTo:String(email).trim()}:{}),
       subject:`New Vypax Enquiry: ${enquiry_type||category||'General'} - ${interest||'Website enquiry'}`,
       html:`
         <h2>New Enquiry Received</h2>
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Phone:</strong> ${phone}</p>
-        <p><strong>Enquiry Type:</strong> ${enquiry_type}</p>
-        <p><strong>Interest:</strong> ${interest}</p>
-        <p><strong>Background:</strong> ${background}</p>
+        <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+        <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+        <p><strong>Phone:</strong> ${escapeHtml(phone)}</p>
+        <p><strong>Enquiry Type:</strong> ${escapeHtml(enquiry_type||category)}</p>
+        <p><strong>Interest:</strong> ${escapeHtml(interest)}</p>
+        <p><strong>Background:</strong> ${escapeHtml(background)}</p>
         <p><strong>Message:</strong></p>
-        <p>${message?.replace(/\n/g,'<br>')}</p>
+        <p>${escapeHtml(message).replace(/\n/g,'<br>')}</p>
         <hr>
-        <p><small>Consent: ${consent}</small></p>
+        <p><small>Consent: ${escapeHtml(consent)}</small></p>
       `
     });
     if(error) throw error;
@@ -300,11 +323,19 @@ app.use('/api',(error,req,res,next)=>{
 
 const site=path.join(__dirname,'..','frontend','dist');
 const publicSite=path.join(__dirname,'..','frontend','public','site');
-app.use('/site',express.static(publicSite));
-if(fs.existsSync(site)) app.use(express.static(site));
+app.use('/site',(req,res,next)=>{
+  let filename;
+  try{filename=path.posix.basename(decodeURIComponent(req.path));}catch{return res.status(400).send('Invalid path');}
+  if(['portal-content.json','internship-assessments.json'].includes(filename))return res.status(404).send('Not found');
+  next();
+});
+app.use('/site',express.static(fs.existsSync(site)?path.join(site,'site'):publicSite,{extensions:['html']}));
+if(fs.existsSync(site)) app.use(express.static(site,{extensions:['html']}));
 
 app.get(/^(?!\/api\/)(?!\/site\/).*$/, (req,res)=>{
   const indexFile=path.join(__dirname,'..','frontend','index.html');
+  const builtIndex=path.join(site,'index.html');
+  if(fs.existsSync(builtIndex)) return res.status(404).sendFile(path.join(site,'404.html'));
   if(fs.existsSync(indexFile)) return res.sendFile(indexFile);
   return res.status(404).send('Not found');
 });
@@ -314,7 +345,8 @@ async function start(){
   if(!connected)console.warn('Using file-backed account storage without MongoDB.');
   app.listen(PORT,()=>console.log(`Vypax website server running on http://localhost:${PORT}${getDatabase()?' (database enabled)':' (file-backed auth)'}`));
 }
-start().catch(error=>{
+module.exports={app,start};
+if(require.main===module)start().catch(error=>{
   console.error('Failed to start server:',error.message);
   process.exitCode=1;
 });
