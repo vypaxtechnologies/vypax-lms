@@ -1,0 +1,92 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const express = require('express');
+
+const directory = fs.mkdtempSync(path.join(process.env.TEMP || process.cwd(), 'vypax-test-'));
+process.env.DATA_DIR = directory;
+process.env.ADMIN_EMAIL = 'reviewer@example.test';
+process.env.ADMIN_PASSWORD = crypto.randomBytes(24).toString('hex');
+delete process.env.MONGODB_URI;
+process.env.NODE_ENV = 'test';
+const auth = require('../auth');
+
+test('internship payments require sign-in, ownership, valid receipts and admin approval', async t => {
+  await auth.connectDatabase();
+  const app = express(); app.use(express.json());
+  app.use('/api/auth', auth.authRouter());
+  app.use('/api/portal', auth.portalRouter());
+  app.use('/api/payments', auth.paymentRouter());
+  app.use('/api/admin', auth.adminRouter());
+  app.use((error,req,res,next) => res.status(error.status || 500).json({error:error.message}));
+  const server = await new Promise(resolve => { const s=app.listen(0,'127.0.0.1',()=>resolve(s)); });
+  t.after(async () => { await new Promise(resolve=>server.close(resolve)); fs.rmSync(directory,{recursive:true,force:true}); });
+  const origin='http://127.0.0.1:'+server.address().port;
+  async function request(endpoint, json, cookie) {
+    const response=await fetch(origin+'/api/'+endpoint,{ method:json===undefined?'GET':'POST', headers:{ ...(json!==undefined?{'Content-Type':'application/json'}:{}), ...(cookie?{Cookie:cookie}:{}) }, body:json===undefined?undefined:JSON.stringify(json) });
+    return { status:response.status, data:await response.json(), cookie:response.headers.get('set-cookie')?.split(';')[0] };
+  }
+  assert.equal((await request('portal/internship',{domain:'internship-web-development',months:1})).status,401);
+  const account={name:'Test Learner',email:'learner@example.test',phone:'9876543210',password:crypto.randomBytes(20).toString('hex'),consent:true};
+  assert.equal((await request('auth/register',{...account,email:'invalid'})).status,400);
+  const learner=await request('auth/register',account); assert.equal(learner.status,201);
+  const cookie=learner.cookie;
+  assert.equal((await request('auth/register',account)).status,409);
+  assert.equal((await request('portal/internship',{domain:'unknown',months:1},cookie)).status,404);
+  assert.equal((await request('portal/internship',{domain:'internship-web-development',months:4},cookie)).status,400);
+  const application=await request('portal/internship',{domain:'internship-web-development',months:2,fee:1,status:'VERIFIED'},cookie);
+  assert.equal(application.status,201);const id=application.data.id;
+  const panel=await request('payments/panel?id='+id,undefined,cookie);
+  assert.equal(panel.data.fee,999);assert.equal(panel.data.status,'AWAITING_PAYMENT');
+  const locked=await request('portal/dashboard',undefined,cookie);assert.equal(locked.data.internships[0].notes.length,0);
+  const content=await request('portal/content?type=internships&id=internship-web-development',undefined,cookie);assert.equal(content.data.locked,true);assert.equal(content.data.projects.length,0);
+  assert.match(panel.data.upiUrl,/am=999/);
+  const other=await request('auth/register',{...account,email:'other@example.test'});
+  assert.equal((await request('payments/panel?id='+id,undefined,other.cookie)).status,404);
+  assert.equal((await request('admin/payments',undefined,cookie)).status,403);
+  assert.equal((await request('payments/proof',{id,reference:'UTR123',receiptUploadId:'../../secret'},cookie)).status,400);
+  const form=new FormData();form.append('file',new Blob([Buffer.from([137,80,78,71,13,10,26,10])],{type:'image/png'}),'receipt.png');
+  const uploaded=await fetch(origin+'/api/payments/receipt-upload?id='+id,{method:'POST',headers:{Cookie:cookie},body:form});
+  assert.equal(uploaded.status,200);const {uploadId}=await uploaded.json();
+  const otherApp=await request('portal/internship',{domain:'internship-web-development',months:1},other.cookie);
+  assert.equal((await request('payments/proof',{id:otherApp.data.id,reference:'UTR123',receiptUploadId:uploadId},other.cookie)).status,400);
+  assert.equal((await request('payments/proof',{id,reference:'UTR123',receiptUploadId:uploadId},cookie)).status,200);
+  assert.equal((await request('payments/proof',{id,reference:'UTR456'},cookie)).status,409);
+  assert.equal((await request('portal/project',{id,month:1,url:'https://example.test/project',description:'Example'},cookie)).status,403);
+  const admin=await request('auth/login',{email:process.env.ADMIN_EMAIL,password:process.env.ADMIN_PASSWORD}); assert.equal(admin.status,200);
+  const review={id,userId:learner.data.user.id,decision:'REJECTED',feedback:'Receipt does not match the bank record.'};
+  assert.equal((await request('admin/payments/review',review,cookie)).status,403);
+  assert.equal((await request('admin/payments/review',review,admin.cookie)).status,200);
+  assert.equal((await request('payments/panel?id='+id,undefined,cookie)).data.status,'REJECTED');
+  assert.equal((await request('payments/proof',{id,reference:'UTR789',receiptUploadId:uploadId},cookie)).status,200);
+  assert.equal((await request('admin/payments/review',{...review,decision:'VERIFIED',feedback:'Checked against payment account'},admin.cookie)).status,200);
+  assert.equal((await request('payments/panel?id='+id,undefined,cookie)).data.status,'VERIFIED');
+  assert.equal((await request('portal/content?type=internships&id=internship-web-development',undefined,cookie)).data.locked,false);
+  assert.equal((await request('payments/proof',{id,reference:'UTR000'},cookie)).status,409);
+  assert.equal((await request('admin/payments/review',review,admin.cookie)).status,409);
+  assert.equal((await request('portal/project',{id,month:1,url:'https://example.test/project',description:'Example'},cookie)).status,201);
+  const receipt=await fetch(origin+'/api/admin/receipts/'+uploadId,{headers:{Cookie:admin.cookie}});
+  assert.equal(receipt.status,200);assert.equal(receipt.headers.get('content-type'),'image/png');
+  assert.equal((await request('admin/receipts/'+uploadId,undefined,cookie)).status,403);
+  assert.equal((await request('auth/me',undefined,'vypax_session=%xx')).status,200);
+  await request('auth/logout',{},cookie);
+  assert.equal((await request('payments/panel?id='+id,undefined,cookie)).status,401);
+});
+
+test('built public pages use extensionless routes and return a real 404 for missing pages', async t => {
+  const {app}=require('../server');
+  const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
+  t.after(()=>new Promise(resolve=>server.close(resolve)));
+  const origin='http://127.0.0.1:'+server.address().port;
+  for(const route of ['/','/services','/about','/contact','/site/paid-internship.js','/sitemap.xml','/robots.txt']){
+    const response=await fetch(origin+route);assert.equal(response.status,200,route);
+  }
+  const missing=await fetch(origin+'/this-page-does-not-exist');assert.equal(missing.status,404);
+  for(const file of ['portal-content.json','internship-assessments.json'])assert.equal((await fetch(origin+'/site/'+file)).status,404);
+  const home=await fetch(origin+'/');assert.match(await home.text(),/Vypax Technologies \| IT Services &amp; Consulting/);
+  process.env.NODE_ENV='production';
+  await assert.rejects(auth.connectDatabase(),/MONGODB_URI is required/);
+  process.env.NODE_ENV='test';
+});
