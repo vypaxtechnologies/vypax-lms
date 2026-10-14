@@ -1,10 +1,14 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALL_SITE_PAGES, SEO_PAGES, SITE_ORIGIN } from '../src/seo-pages.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'dist');
+// Paid learning content and assessment answers belong behind authenticated APIs.
+for (const file of ['portal-content.json','internship-assessments.json']) {
+  await unlink(path.join(output,'site',file)).catch(error => { if(error.code !== 'ENOENT')throw error; });
+}
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, character => ({
@@ -43,6 +47,7 @@ function updateHead(html, { title, description, url, indexable }) {
     ['name', 'twitter:title', title],
     ['name', 'twitter:description', description]
   ];
+  if (process.env.GOOGLE_SITE_VERIFICATION) metadata.push(['name', 'google-site-verification', process.env.GOOGLE_SITE_VERIFICATION]);
 
   for (const [attribute, name, value] of metadata) {
     const element = `<meta ${attribute}="${escapeHtml(name)}" content="${escapeHtml(value)}">`;
@@ -96,11 +101,29 @@ for (const page of ALL_SITE_PAGES) {
 }
 
 const shell = await readFile(path.join(output, 'index.html'), 'utf8');
+function addSearchContent(html, sourceHtml) {
+  const main = sourceHtml.match(/<main\b[^>]*>[\s\S]*?<\/main>/i)?.[0];
+  if (!main) return html;
+  const content = main.replace(/\b(href|src)="([^"#]+)"/g, (match, attribute, value) => {
+    if (/^(?:[a-z]+:|\/\/|\/)/i.test(value)) return match;
+    const url = new URL(value, `${SITE_ORIGIN}/site/`);
+    const page = ALL_SITE_PAGES.find(item => '/site/' + item.file === url.pathname);
+    return `${attribute}="${escapeHtml(page ? page.path + url.search + url.hash : url.pathname + url.search + url.hash)}"`;
+  });
+  return html.replace('<div id="root"></div>', `<div id="root">${content}</div>`);
+}
+const organization = { '@context':'https://schema.org', '@type':'Organization', name:'Vypax Technologies', url:SITE_ORIGIN, logo:`${SITE_ORIGIN}/site/logo.svg` };
+const schema = `<script type="application/ld+json">${JSON.stringify(organization).replace(/</g, '\\u003c')}</script>`;
+const websiteSchema = `<script type="application/ld+json">${JSON.stringify({ '@context':'https://schema.org', '@type':'WebSite', name:'Vypax Technologies', alternateName:'Vypax', url:SITE_ORIGIN })}</script>`;
+const homepage = SEO_PAGES.find(page => page.file === 'index.html');
+const homeSource = await readFile(path.join(output, 'site', 'index.html'), 'utf8');
+await writeFile(path.join(output, 'index.html'), addSearchContent(updateHead(shell, { ...homepage, url:`${SITE_ORIGIN}/`, indexable:true }), homeSource).replace('</head>', schema + websiteSchema + '</head>'));
 for (const page of ALL_SITE_PAGES) {
   if (page.file === 'index.html') continue;
   const url = new URL(page.path, SITE_ORIGIN).href;
   const description = SEO_PAGES.includes(page) ? page.description : '';
-  const html = updateHead(shell, { ...page, description, url, indexable: SEO_PAGES.includes(page) });
+  const source = await readFile(path.join(output, 'site', page.file), 'utf8');
+  const html = addSearchContent(updateHead(shell, { ...page, description, url, indexable: SEO_PAGES.includes(page) }), source).replace('</head>', schema + '</head>');
   await writeFile(path.join(output, page.file), html);
 }
 
