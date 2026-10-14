@@ -17,7 +17,7 @@ const PORTAL_CONTENT_FILE = path.join(PUBLIC_SITE_DIR, 'portal-content.json');
 const HACKATHON_DATA_FILE = path.join(PUBLIC_SITE_DIR, 'hackathons-data.json');
 const INTERNSHIP_ASSESSMENTS_FILE = path.join(PUBLIC_SITE_DIR, 'internship-assessments.json');
 
-const DEFAULT_ADMIN_EMAIL = 'admin@vypaxtechnologies.com';
+const DEFAULT_ADMIN_EMAIL = 'vypaxtechnologies@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = '';
 
 function getConfiguredAdminCredentials() {
@@ -27,10 +27,17 @@ function getConfiguredAdminCredentials() {
   };
 }
 const DEFAULT_JOBS = [
+  {id:'sales-executive',name:'Sales Executive',description:'Develop customer relationships and support business growth.',location:'Remote',status:'Applications open',requirements:['Communication and sales skills']},
   { id: 'business-development-executive', name: 'Business Development Executive', description: 'Generate opportunities and grow learner and business relationships.', location: 'Bengaluru / Remote', status: 'Applications open', requirements: ['Strong communication', 'Sales focus', 'CRM comfort'] },
   { id: 'lead-generation-executive', name: 'Lead Generation Executive', description: 'Identify qualified leads and support funnel growth for student and corporate programmes.', location: 'Remote', status: 'Applications open', requirements: ['Research and outreach', 'Email and phone outreach', 'Good follow-up discipline'] },
   { id: 'hr-intern', name: 'HR Intern', description: 'Support recruitment coordination, onboarding, and learner engagement workflows.', location: 'Bengaluru', status: 'Internship', requirements: ['Organised and patient', 'Professional communication', 'Documentation skills'] }
 ];
+
+const baseContent = JSON.parse(fs.readFileSync(PORTAL_CONTENT_FILE,'utf8'));
+const catalogue = require('./catalogue')({
+  defaults:[...Object.entries(baseContent.courses||{}).map(([id,item])=>({id,type:'training',title:item.name||id,description:item.description||'Training program',category:item.category||'Training',durationMonths:6,fee:0,fees:{1:499,2:999,3:1299,6:1999},notes:'',requirements:''})),...Object.entries(baseContent.internships||{}).map(([id,item])=>({id,type:'internships',title:item.name||id,description:item.description||'Practical internship program',category:'Internship',durationMonths:1,fee:499,fees:{1:499,2:999,3:1299,6:1999},notes:'',requirements:''})),...DEFAULT_JOBS.map(item=>({...item,type:'jobs',title:item.name,durationMonths:1,fee:0,fees:{1:0,2:0,3:0,6:0},requirements:item.requirements.join('\n'),notes:''}))],
+  getDatabase:()=>database,readJson,writeJson,dataDir:DATA_DIR
+});
 
 async function ensureStorage() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -42,7 +49,7 @@ async function ensureStorage() {
   if (adminPassword && !users.some((user) => normalizeEmail(user.email) === adminEmail)) {
     const { salt, hash } = hashPassword(adminPassword);
     users.push({
-      id: 'admin-user',
+      id: 'admin-'+crypto.randomUUID(),
       name: 'Vypax Administrator',
       email: adminEmail,
       phone: '+91 0000000000',
@@ -51,6 +58,13 @@ async function ensureStorage() {
       salt,
       createdAt: new Date().toISOString()
     });
+    await writeUsers(users);
+  }
+  const configuredUser=users.find(user=>normalizeEmail(user.email)===adminEmail);
+  if(adminPassword&&configuredUser&&configuredUser.role!=='ADMIN'){
+    configuredUser.role='ADMIN';
+    Object.assign(configuredUser,hashPassword(adminPassword));
+    configuredUser.passwordHash=configuredUser.hash;delete configuredUser.hash;
     await writeUsers(users);
   }
 
@@ -175,8 +189,17 @@ async function updatePortalState(userId, update) {
   return state;
 }
 
-function getPortalContent() {
-  return readRequiredJson(PORTAL_CONTENT_FILE);
+async function getPortalContent() {
+  const content=readRequiredJson(PORTAL_CONTENT_FILE);
+  for(const item of await catalogue.list()){
+    if(!item.managed||item.type==='jobs')continue;
+    const type=item.type==='training'?'courses':'internships';
+    content[type]||={};
+    const previous=content[type][item.id]||{};
+    // Keep curricula and learner records when an offer is unpublished.
+    content[type][item.id]={...previous,name:item.title,description:item.description,duration:item.durationMonths+' months',fee:'₹'+item.fee,fees:item.fees,published:item.published,notes:item.notes?item.notes.split('\n').filter(Boolean).map((text,index)=>({title:'Lesson '+(index+1),text})):previous.notes||[],projects:previous.projects||[],resources:previous.resources||[]};
+  }
+  return content;
 }
 
 function createApplicationId(prefix) {
@@ -192,23 +215,25 @@ async function getPaymentApplication(userId, paymentId) {
 }
 
 async function addTrainingOrEventApplication(userId, type, itemId) {
-  const content = getPortalContent();
+  const content = await getPortalContent();
   const item = content[type]?.[itemId];
   if (!item) return null;
+  if(item.published===false)return {unavailable:true};
 
   const feeText = String(item.fee ?? item.price ?? '');
   const freeEvent = type === 'hackathons' && /(?:₹|INR|Rs\.?)\s*0\b.*free/i.test(feeText);
   const feeMatch = feeText.match(/(?:₹|INR|Rs\.?)\s*([\d,]+)/i);
   if (!feeMatch && !freeEvent) return { unavailable: true };
 
+  const noPaymentRequired = freeEvent || Number(feeMatch?.[1].replace(/,/g,'')) === 0;
   const createdAt = new Date().toISOString();
   const application = {
     id: createApplicationId(type === 'hackathons' ? 'event' : 'training'),
     [type === 'hackathons' ? 'event' : 'course']: itemId,
     name: item.name,
     fee: freeEvent ? 0 : Number(feeMatch[1].replace(/,/g, '')),
-    status: freeEvent ? 'VERIFIED' : 'AWAITING_PAYMENT',
-    ...(freeEvent ? { verifiedAt: createdAt } : {}),
+    status: noPaymentRequired ? 'VERIFIED' : 'AWAITING_PAYMENT',
+    ...(noPaymentRequired ? { verifiedAt: createdAt } : {}),
     createdAt
   };
 
@@ -664,9 +689,14 @@ function portalRouter() {
       return res.status(400).json({ error: 'A valid content type and id are required.' });
     }
 
-    const content = getPortalContent()[type]?.[id];
+    const content = (await getPortalContent())[type]?.[id];
     if (!content) return res.status(404).json({ error: 'Portal content not found.' });
     const result = { ...content, configuration: content.configuration || {} };
+    if(type==='courses'&&Number(String(content.fee||'').replace(/[^\d]/g,''))>0){
+      const verified=(await getPortalState(req.user.id)).trainingApplications.some(item=>item.course===id&&item.status==='VERIFIED');
+      result.locked=!verified;
+      if(!verified){result.notes=[];result.resources=[];result.materials=[];}
+    }
     if (type === 'internships') {
       const verified = (await getPortalState(req.user.id)).internships.some(item => item.domain === id && item.status === 'VERIFIED');
       result.locked = !verified;
@@ -690,7 +720,7 @@ function portalRouter() {
   });
 
   router.get('/jobs', async (req, res) => {
-    return res.json({ jobs: DEFAULT_JOBS });
+    return res.json({ jobs: (await catalogue.list()).filter(item=>item.type==='jobs'&&item.published).map(item=>({...item,name:item.title,status:'Applications open',requirements:String(item.requirements||'').split('\n').filter(Boolean)})) });
   });
 
   router.get('/results', async (req, res) => {
@@ -715,11 +745,12 @@ function portalRouter() {
       return res.status(400).json({ error: 'Choose a valid internship duration.' });
     }
 
-    const content = getPortalContent().internships?.[domain];
+    const content = (await getPortalContent()).internships?.[domain];
     if (!content) return res.status(404).json({ error: 'Internship domain not found.' });
+    if(content.published===false)return res.status(409).json({error:'This internship is not accepting new applications.'});
     const existing = (await getPortalState(req.user.id)).internships.find(item => item.domain === domain && item.months === months && ['AWAITING_PAYMENT','PENDING','REJECTED'].includes(item.status));
     if (existing) return res.json({id:existing.id,message:'Continue with your saved internship application.'});
-    const feeByMonths = { 1: 499, 2: 999, 3: 1299, 6: 1999 };
+    const feeByMonths = content.fees || { 1: 499, 2: 999, 3: 1299, 6: 1999 };
     const application = {
       id: createApplicationId('internship'),
       domain,
@@ -835,7 +866,7 @@ function portalRouter() {
       return res.status(400).json({ error: 'Project title and description are required.' });
     }
     const eventId = String(event || '').trim();
-    if (!getPortalContent().hackathons?.[eventId]) {
+    if (!(await getPortalContent()).hackathons?.[eventId]) {
       return res.status(404).json({ error: 'Hackathon event not found.' });
     }
     const enrollment = (await getPortalState(req.user.id)).hackathonEnrollments
@@ -870,6 +901,7 @@ function portalRouter() {
 function adminRouter() {
   const router = express.Router();
   router.use(authRequired, adminRequired);
+  catalogue.mountAdmin(router);
 
   router.get('/payments', async (req, res) => {
     const payments = [];
@@ -932,7 +964,7 @@ function adminRouter() {
     return res.json({
       admin: sanitizeUser(req.user),
       totalLearners: users.length,
-      openPositions: DEFAULT_JOBS.length,
+      openPositions: (await catalogue.list()).filter(item=>item.type==='jobs'&&item.published).length,
       learners: users
     });
   });
@@ -941,6 +973,8 @@ function adminRouter() {
 }
 
 module.exports = {
+  getCatalogue: catalogue.list,
+  catalogueRouter: catalogue.publicRouter,
   authRouter,
   portalRouter,
   adminRouter,

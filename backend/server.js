@@ -5,7 +5,7 @@ const path=require('path');
 const fs=require('fs');
 const multer=require('multer');
 const {Resend}=require('resend');
-const {authRouter,connectDatabase,getDatabase,portalRouter,paymentRouter,adminRouter}=require('./auth');
+const {authRouter,connectDatabase,getDatabase,portalRouter,paymentRouter,adminRouter,catalogueRouter,getCatalogue}=require('./auth');
 
 const app=express();
 const PORT=Number(process.env.PORT||5000);
@@ -56,6 +56,7 @@ app.use('/api/auth',authRouter());
 app.use('/api/portal',portalRouter());
 app.use('/api/payments',paymentRouter());
 app.use('/api/admin',adminRouter());
+app.use('/api/catalogue',catalogueRouter());
 
 const careerRoles=new Set(['Business Development Executive','Sales Executive','Lead Generation Executive','HR Intern']);
 const careerApplicationFields=[
@@ -234,7 +235,9 @@ app.post('/api/career-applications',careerUpload.single('attachment'),async(req,
   const requiredFields=['position','name','email','phone','city','state','country','qualification','specialisation','institution','graduation_year','experience_level','skills','availability'];
   const missing=requiredFields.filter(field=>!String(body[field]||'').trim());
   if(missing.length)return res.status(400).json({error:`Please complete all required fields: ${missing.join(', ')}.`});
-  if(!careerRoles.has(String(body.position).trim()))return res.status(400).json({error:'Please choose a valid open position.'});
+  const roles=await getCatalogue();
+  const selectedRole=roles.find(item=>item.type==='jobs'&&(item.title===String(body.position).trim()||item.legacyTitle===String(body.position).trim()));
+  if(selectedRole?!selectedRole.published||selectedRole.title!==String(body.position).trim():!careerRoles.has(String(body.position).trim()))return res.status(400).json({error:'Please choose a valid open position.'});
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(body.email).trim()))return res.status(400).json({error:'Please provide a valid email address.'});
   if(!/^\d{4}$/.test(String(body.graduation_year).trim()))return res.status(400).json({error:'Graduation year must contain four digits.'});
   if(!['Fresher','Experienced'].includes(body.experience_level))return res.status(400).json({error:'Please choose a valid experience level.'});
